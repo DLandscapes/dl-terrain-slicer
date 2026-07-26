@@ -27,18 +27,49 @@ laser-pass layers:
 
 ## Run
 
+Double-click `start.bat` (Windows), or from any platform:
+
 ```
-.venv\Scripts\python.exe -m uvicorn app.main:app --port 8765
+python launcher.py
 ```
 
-then open http://localhost:8765. Drop a GeoTIFF (or click *load demo
-terrain*), tune the parameters, check the **Sheets** and **Stack** previews,
-then **Export DXF (ZIP)**. The ZIP contains `sheet_XX.dxf` files plus a
-`cutting_report.txt` with assembly notes.
+It picks a free port starting at 8765 — so a second copy never fights the
+one already running — and opens the browser for you. Drop a GeoTIFF (or click
+*load demo terrain*), tune the parameters, check the **Sheets** and **Stack**
+previews, then **Export DXF (ZIP)**. The ZIP contains `sheet_XX.dxf` files
+plus a `cutting_report.txt` with assembly notes.
 
 First-time setup: `python -m venv .venv` then
 `.venv\Scripts\pip install -r requirements.txt`
 (if a wheel is missing for your Python, use `py -3.12 -m venv .venv`).
+
+## Download (no Python needed)
+
+Packaged builds for Windows and macOS are attached to each
+[release](../../releases): download the zip, unpack it anywhere, run
+`DL-Terrain-Slicer`. Everything is included — there is nothing to install
+and the app never talks to the internet.
+
+**The builds are unsigned**, so both systems will warn you the first time.
+Code signing costs a yearly developer subscription that is not worth it until
+the tool has real users, so:
+
+- **Windows** — SmartScreen says "Windows protected your PC":
+  *More info* → *Run anyway*.
+- **macOS** — Gatekeeper refuses an unidentified developer: right-click the
+  app → *Open* → *Open*. If macOS still refuses, run
+  `xattr -d com.apple.quarantine <unpacked folder>` once in Terminal.
+
+Building them yourself instead is two commands:
+
+```
+pip install -r requirements-build.txt
+pyinstaller terrainslicer.spec
+```
+
+The result lands in `dist/DL-Terrain-Slicer/`;
+`DL-Terrain-Slicer --selftest` starts it, checks it answers, and exits —
+that is exactly what CI runs on every build.
 
 ## Browser version
 

@@ -25,3 +25,7 @@ demo_export*.zip
 # web/fetch_pyodide.py) and the generated static bundle
 web/vendor/
 web/dist/
+
+# desktop build: PyInstaller output (rebuild with pyinstaller terrainslicer.spec)
+/build/
+/dist/

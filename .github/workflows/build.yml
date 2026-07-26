@@ -1,0 +1,124 @@
+name: Build downloads
+
+# Tagging a version builds the packaged downloads and attaches them to a
+# GitHub Release. Run it by hand first (Actions -> Build downloads -> Run
+# workflow) to check a change before committing to a tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: "Also build macOS (10x Actions minutes while the repo is private)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 3.12 rather than the newest: every pinned wheel in requirements.txt is
+  # available for it on all three runners
+  PYTHON_VERSION: "3.12"
+  APP_NAME: DL-Terrain-Slicer
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-build.txt
+      - name: Run tests
+        run: pytest tests -q
+      - name: Build
+        run: pyinstaller --noconfirm --clean terrainslicer.spec
+      - name: Self-test the packaged app
+        run: dist/${{ env.APP_NAME }}/${{ env.APP_NAME }}.exe --selftest
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "dev" }
+          Compress-Archive -Path "dist/$env:APP_NAME" -DestinationPath "$env:APP_NAME-$version-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: "*.zip"
+          if-no-files-found: error
+
+  macos:
+    # While the repo is private, macOS runners bill at a 10x multiplier and
+    # eat the free allowance in a few builds - so they are opt-in until the
+    # repo goes public, when this condition turns itself off.
+    if: ${{ !github.event.repository.private || inputs.macos }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            label: macos-arm64
+          - runner: macos-13
+            label: macos-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-build.txt
+      - name: Run tests
+        run: pytest tests -q
+      - name: Build
+        run: pyinstaller --noconfirm --clean terrainslicer.spec
+      - name: Self-test the packaged app
+        run: dist/$APP_NAME/$APP_NAME --selftest
+      - name: Package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then version="$GITHUB_REF_NAME"; else version="dev"; fi
+          # ditto, not zip: it preserves the executable bits and symlinks that
+          # a macOS build needs to still run after unpacking
+          ditto -c -k --sequesterRsrc --keepParent "dist/$APP_NAME" \
+            "$APP_NAME-$version-${{ matrix.label }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: "*.zip"
+          if-no-files-found: error
+
+  release:
+    # only for tags, and only if the Windows build passed; a skipped macOS
+    # job must not block the release
+    if: ${{ github.ref_type == 'tag' && !cancelled() && needs.windows.result == 'success' }}
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'EOF'
+          Packaged builds — download, unpack, run. No Python needed.
+
+          The downloads are **unsigned**: on Windows use SmartScreen's
+          *More info → Run anyway*, on macOS right-click → *Open*. See the
+          README for details.
+
+          Verify dimensions before cutting. GPLv3, no warranty.
+          EOF
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip \
+            --title "DL Terrain Slicer $GITHUB_REF_NAME" \
+            --notes-file notes.md

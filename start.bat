@@ -8,7 +8,7 @@ if not exist ".venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-echo Starting DL Terrain Slicer at http://localhost:8765 ...
-start "" http://localhost:8765
-".venv\Scripts\python.exe" -m uvicorn app.main:app --port 8765
+rem launcher.py picks a free port and opens the browser itself. The packaged
+rem downloads run the very same file, so there is only one startup path.
+".venv\Scripts\python.exe" launcher.py
 pause

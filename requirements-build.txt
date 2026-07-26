@@ -1,0 +1,4 @@
+# Extra tooling for producing the packaged downloads (see terrainslicer.spec
+# and .github/workflows/build.yml). Not needed to run the app from source.
+-r requirements.txt
+pyinstaller==6.21.0

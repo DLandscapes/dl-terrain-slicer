@@ -20,7 +20,21 @@ from app import core
 from app.core import APP_BUILD, SlicerError
 
 app = FastAPI(title="DL TerrainSlicer")
-STATIC = Path(__file__).resolve().parent / "static"
+
+
+def resource_path(rel: str) -> Path:
+    """Locate a bundled file, running from source or from a frozen build.
+
+    PyInstaller unpacks data files under sys._MEIPASS, where "the folder next
+    to this .py" does not exist. Everything else in the app works on bytes in
+    memory - this is the only place that reads from disk.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    root = Path(base) if base else Path(__file__).resolve().parent.parent
+    return root / rel
+
+
+STATIC = resource_path("app/static")
 
 _store = core.Store()
 
