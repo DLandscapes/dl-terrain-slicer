@@ -1,23 +1,48 @@
 "use strict";
 
-// must match APP_BUILD in app/main.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 16;
+// must match APP_BUILD in app/core.py and the ?v= tags in index.html
+const EXPECTED_BUILD = 17;
+
+/* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
+ * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
 (async () => {
+  const boot = document.querySelector("#boot");
+  const fill = document.querySelector("#boot-fill");
+  const stepEl = document.querySelector("#boot-step");
+  const STEPS = ["runtime", "packages", "slicer", "ready"];
+  if (api.mode === "wasm") {
+    boot.hidden = false;
+    api.onProgress = (step, detail) => {
+      const i = Math.max(0, STEPS.indexOf(step));
+      fill.style.width = `${((i + 1) / STEPS.length) * 100}%`;
+      stepEl.textContent = detail || step;
+    };
+  }
   let stale = false;
   try {
-    const res = await fetch("/api/version");
-    stale = !res.ok || (await res.json()).build !== EXPECTED_BUILD;
-  } catch {
+    await api.ready();
+    stale = (await api.version()).build !== EXPECTED_BUILD;
+  } catch (err) {
+    if (api.mode === "wasm") {
+      stepEl.textContent = "failed: " + err.message;
+      boot.classList.add("failed");
+      return;
+    }
     stale = true;
   }
+  boot.hidden = true;
   if (stale) {
     const w = document.querySelector("#warnings");
     w.hidden = false;
-    w.textContent =
-      "The server is running an OLDER version of the app than the files on disk. " +
-      "Close the server console window (start.bat) and start it again, then reload this page (Ctrl+F5).";
-    alert("Server restart needed:\n\nThe running server is an older version. " +
-      "Close the black server console window, double-click start.bat again, then reload this page.");
+    w.textContent = api.mode === "wasm"
+      ? "This page mixes files from two different app versions (an old copy is "
+        + "cached). Reload with Ctrl+F5 - if it persists, empty the browser cache."
+      : "The server is running an OLDER version of the app than the files on disk. "
+        + "Close the server console window (start.bat) and start it again, then reload this page (Ctrl+F5).";
+    if (api.mode !== "wasm") {
+      alert("Server restart needed:\n\nThe running server is an older version. " +
+        "Close the black server console window, double-click start.bat again, then reload this page.");
+    }
   }
 })();
 
@@ -58,9 +83,7 @@ $("#demo-link").addEventListener("click", async (e) => {
   e.stopPropagation();
   setBusy(true);
   try {
-    const res = await fetch("/api/demo", { method: "POST" });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    applyUpload(await res.json());
+    applyUpload(await api.demo());
   } catch (err) {
     alert("Demo failed: " + err.message);
   } finally {
@@ -69,13 +92,9 @@ $("#demo-link").addEventListener("click", async (e) => {
 });
 
 async function uploadFile(file) {
-  const fd = new FormData();
-  fd.append("file", file);
   setBusy(true);
   try {
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    applyUpload(await res.json());
+    applyUpload(await api.upload(file));
   } catch (err) {
     alert("Upload failed: " + err.message);
   } finally {
@@ -166,14 +185,9 @@ async function uploadHatch(file, expectedKind) {
     alert("Load a terrain file first, then add the shapefile.");
     return;
   }
-  const fd = new FormData();
-  fd.append("file", file);
   setBusy(true);
   try {
-    const res = await fetch(`/api/hatch?upload_id=${encodeURIComponent(state.uploadId)}`,
-      { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    const data = await res.json();
+    const data = await api.hatchAdd(state.uploadId, file);
     const sameKind = state.hatches.filter((h) => h.kind === data.kind).length;
     state.hatches.push({
       id: data.hatch_id, kind: data.kind, name: data.name,
@@ -198,7 +212,7 @@ async function uploadHatch(file, expectedKind) {
 
 async function removeHatch(id) {
   if (state.uploadId) {
-    await fetch(`/api/hatch/${state.uploadId}/${id}`, { method: "DELETE" });
+    await api.hatchRemove(state.uploadId, id);
   }
   state.hatches = state.hatches.filter((h) => h.id !== id);
   renderHatchList();
@@ -322,13 +336,7 @@ function requestSlice() {
 async function doSlice() {
   setBusy(true);
   try {
-    const res = await fetch("/api/slice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upload_id: state.uploadId, params: readParams() }),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    state.result = await res.json();
+    state.result = await api.slice(state.uploadId, readParams());
     $("#empty-state").hidden = true;
     $("#export").disabled = state.result.stats.n_sheets === 0;
     renderStats();
@@ -359,17 +367,10 @@ function renderStats() {
 $("#export").addEventListener("click", async () => {
   setBusy(true);
   try {
-    const res = await fetch("/api/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upload_id: state.uploadId, params: readParams() }),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    const blob = await res.blob();
-    const name = (res.headers.get("Content-Disposition") || "").match(/filename="(.+)"/)?.[1] || "laser.zip";
+    const { blob, filename } = await api.export(state.uploadId, readParams());
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = name;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (err) {

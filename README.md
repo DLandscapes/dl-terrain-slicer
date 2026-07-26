@@ -40,6 +40,16 @@ First-time setup: `python -m venv .venv` then
 `.venv\Scripts\pip install -r requirements.txt`
 (if a wheel is missing for your Python, use `py -3.12 -m venv .venv`).
 
+## Browser version
+
+The same app also builds into a folder of static files that runs entirely in
+the visitor's browser (Pyodide/WebAssembly) — no server-side Python, no
+upload of anyone's terrain data. See [web/README.md](web/README.md).
+
+All application logic lives in `app/core.py`; `app/main.py` is only the
+FastAPI wrapper around it and `web/bridge.py` only the browser wrapper, so
+both builds slice with exactly the same code.
+
 ## Parameters
 
 - **Scale** and **material thickness** determine the real-world contour

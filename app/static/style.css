@@ -2,19 +2,19 @@
    headings/UI, Quattrocento Sans for body text. OFL-licensed, served locally. */
 @font-face {
   font-family: "Source Sans 3";
-  src: url("/static/fonts/SourceSans3-VariableFont_wght.ttf") format("truetype-variations");
+  src: url("fonts/SourceSans3-VariableFont_wght.ttf") format("truetype-variations");
   font-weight: 200 900;
   font-display: swap;
 }
 @font-face {
   font-family: "Quattrocento Sans";
-  src: url("/static/fonts/QuattrocentoSans-Regular.ttf") format("truetype");
+  src: url("fonts/QuattrocentoSans-Regular.ttf") format("truetype");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "Quattrocento Sans";
-  src: url("/static/fonts/QuattrocentoSans-Bold.ttf") format("truetype");
+  src: url("fonts/QuattrocentoSans-Bold.ttf") format("truetype");
   font-weight: 700;
   font-display: swap;
 }
@@ -244,3 +244,23 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 }
 #canvas.pannable { cursor: grab; }
 #canvas.pannable.dragging { cursor: grabbing; }
+
+/* ---------- first-start overlay (browser/WASM build only) ---------- */
+#boot {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(244, 242, 238, .96);
+}
+#boot[hidden] { display: none; }
+.boot-box {
+  width: min(420px, 84vw); text-align: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 26px 28px; font-family: var(--font-head);
+}
+.boot-box b { font-size: 1.05rem; }
+.boot-box p { margin: 10px 0 14px; color: var(--ink-soft); font-size: .88rem; }
+.boot-box small { display: block; margin-top: 14px; color: var(--ink-soft); font-size: .76rem; line-height: 1.5; }
+.boot-bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s ease; }
+#boot.failed .boot-bar i { background: #c0392b; }
+#boot.failed #boot-step { color: #c0392b; }
