@@ -29,3 +29,11 @@ web/dist/
 # desktop build: PyInstaller output (rebuild with pyinstaller terrainslicer.spec)
 /build/
 /dist/
+
+# Marc's font stash - the app ships its own brand fonts in app/static/fonts,
+# these are unused source files. Leading slash matters: a bare "fonts/" would
+# also match app/static/fonts and break the app.
+/fonts/
+
+# local editor/agent config, machine-specific paths
+/.claude/
