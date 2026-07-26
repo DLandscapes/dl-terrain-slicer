@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 17;
+const EXPECTED_BUILD = 18;
 
 /* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
  * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
@@ -127,7 +127,7 @@ function applyUpload(data) {
   const notes = $("#dtm-notes");
   notes.hidden = data.warnings.length === 0;
   notes.textContent = data.warnings.join(" · ");
-  requestSlice();
+  requestSlice(true);
 }
 
 /* ---------- hatch shapefiles (multiple layers, each with own settings) ---------- */
@@ -202,7 +202,7 @@ async function uploadHatch(file, expectedKind) {
       $("#warnings").hidden = false;
       $("#warnings").textContent = notes.join("\n");
     }
-    requestSlice();
+    requestSlice(true);
   } catch (err) {
     alert("Shapefile failed: " + err.message);
   } finally {
@@ -216,7 +216,7 @@ async function removeHatch(id) {
   }
   state.hatches = state.hatches.filter((h) => h.id !== id);
   renderHatchList();
-  requestSlice();
+  requestSlice(true);
 }
 
 function patternSelectHTML(selected) {
@@ -327,10 +327,15 @@ function readParams() {
 }
 $("#params").addEventListener("input", () => requestSlice());
 
-function requestSlice() {
+/* The 400 ms wait is there for the parameter form, which fires on every
+ * keystroke and every slider tick. Discrete actions - a terrain or a
+ * shapefile arriving, a layer removed - have nothing to coalesce, so they
+ * ask for the slice straight away instead of staring at an unchanged
+ * viewport first. */
+function requestSlice(immediate = false) {
   if (!state.uploadId) return;
   clearTimeout(state.timer);
-  state.timer = setTimeout(doSlice, 400);
+  state.timer = setTimeout(doSlice, immediate ? 0 : 400);
 }
 
 async function doSlice() {
@@ -757,4 +762,11 @@ function getCss(name) {
 function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? +v.toFixed(1) + "" : v.toPrecision(2);
 }
-function setBusy(b) { $("#busy").hidden = !b; }
+/* Counted, not a plain flag: reading a shapefile and the re-slice it
+ * triggers overlap, and whichever finished first used to switch the
+ * indicator off while the other was still working. */
+let busyCount = 0;
+function setBusy(b) {
+  busyCount = Math.max(0, busyCount + (b ? 1 : -1));
+  $("#busy").hidden = busyCount === 0;
+}
