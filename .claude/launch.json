@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "terrainslicer",
+      "runtimeExecutable": "D:\\Claude Code Projects\\DL-TerrainSlicer\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}

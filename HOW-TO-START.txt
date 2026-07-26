@@ -1,0 +1,53 @@
+DL TERRAIN SLICER - HOW TO START
+=================================
+
+The app runs locally on your computer. No internet needed.
+
+
+OPTION 1 - DOUBLE-CLICK (easiest)
+---------------------------------
+1. Open the folder:  D:\Claude Code Projects\DL-TerrainSlicer
+2. Double-click:     start.bat
+   - A black console window opens (this is the server - keep it open)
+   - Your browser opens at http://localhost:8765 automatically
+   - If the page shows an error at first, wait 2 seconds and press F5
+3. To STOP the app: close the black console window
+   (or press Ctrl+C inside it)
+
+
+OPTION 2 - MANUALLY VIA POWERSHELL / TERMINAL
+---------------------------------------------
+1. Open PowerShell (Windows key, type "powershell", Enter)
+2. Paste these two lines and press Enter:
+
+   cd "D:\Claude Code Projects\DL-TerrainSlicer"
+   .venv\Scripts\python.exe -m uvicorn app.main:app --port 8765
+
+3. Open your browser at:  http://localhost:8765
+4. To STOP: press Ctrl+C in the PowerShell window
+
+
+USING THE APP
+-------------
+- Drop a GeoTIFF DTM (.tif) or an OBJ terrain mesh (.obj) into the
+  upload field - or click "load demo terrain" to try it out.
+- Optionally load a polygon shapefile (.shp) under "Hatch areas".
+- Adjust parameters; the preview updates live.
+- "Export DXF (ZIP)" downloads one DXF per material sheet plus a
+  cutting_report.txt with assembly notes.
+
+
+IF IT DOES NOT START
+--------------------
+- "Port already in use": the app is already running - just open
+  http://localhost:8765 in the browser. Or another program uses
+  port 8765; change --port 8765 to e.g. --port 8766 (then browse
+  to http://localhost:8766).
+- ".venv missing" (e.g. after copying a backup to a new machine):
+  open PowerShell in the project folder and run once:
+
+     python -m venv .venv
+     .venv\Scripts\pip install -r requirements.txt
+
+  then start normally as above.
+- The page looks broken after an update: hard-refresh with Ctrl+F5.

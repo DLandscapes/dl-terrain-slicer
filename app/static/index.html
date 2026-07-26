@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DL Terrain Slicer</title>
+<link rel="icon" type="image/png" href="/static/logo-dl.png">
+<link rel="stylesheet" href="/static/style.css?v=16">
+</head>
+<body>
+<aside id="sidebar">
+  <header>
+    <img id="logo" src="/static/logo-dl.png" alt="Digital Landscapes">
+    <div>
+      <h1>DL&nbsp;Terrain&nbsp;Slicer</h1>
+      <p class="sub">Terrain &rarr; laser-cut contour model</p>
+    </div>
+  </header>
+
+  <div id="dropzone" tabindex="0">
+    <input type="file" id="file-input" accept=".tif,.tiff,.obj" hidden>
+    <div id="drop-hint">
+      <strong>Drop a GeoTIFF DTM or OBJ mesh here</strong>
+      <span>or click to choose a file</span>
+      <span><a href="#" id="demo-link">load demo terrain</a></span>
+    </div>
+    <div id="dtm-card" hidden>
+      <img id="hillshade" alt="hillshade preview">
+      <div class="dtm-name">
+        <span id="dtm-filename"></span>
+        <span class="replace-hint">click to replace</span>
+      </div>
+      <dl id="dtm-meta"></dl>
+      <div id="dtm-notes" hidden></div>
+    </div>
+  </div>
+
+  <form id="params" autocomplete="off">
+    <details open>
+      <summary>Model</summary>
+      <label><span>Scale 1&nbsp;:</span>
+        <input type="number" name="scale" value="500" min="1" step="50"></label>
+      <label><span>Material thickness <em>mm</em></span>
+        <input type="number" name="thickness_mm" value="2" min="0.1" step="0.1"></label>
+      <label><span>Vertical exaggeration</span>
+        <input type="number" name="vertical_exaggeration" value="1" min="0.1" step="0.1"></label>
+      <label><span>Slicing base</span>
+        <select name="base_mode">
+          <option value="lowest" selected>lowest point</option>
+          <option value="zero">0 m altitude</option>
+        </select></label>
+      <label><span>Number of boards <em>&ge; 2</em></span>
+        <input type="number" name="n_boards" value="4" min="2" step="1"></label>
+      <label class="check" title="Layer 0: a full-footprint bottom board the whole model sits on. Uncheck to start stacking directly with contour 1 and save one board of material.">
+        <input type="checkbox" name="base_plate" checked>
+        <span>Base plate (layer&nbsp;0)</span></label>
+    </details>
+    <details open>
+      <summary>Material sheet</summary>
+      <label><span>Width <em>mm</em></span>
+        <input type="number" name="sheet_width_mm" value="1000" min="50" step="10"></label>
+      <label><span>Height <em>mm</em></span>
+        <input type="number" name="sheet_height_mm" value="700" min="50" step="10"></label>
+      <label><span>Margin <em>mm</em></span>
+        <input type="number" name="sheet_margin_mm" value="10" min="0" step="1"></label>
+      <label><span>Part spacing <em>mm</em></span>
+        <input type="number" name="part_spacing_mm" value="5" min="0" step="1"></label>
+    </details>
+    <details open>
+      <summary>Labels</summary>
+      <label title="0 = no contour numbers at all; 0.5 = only where a readable label fits the ring; 1 = force a (possibly tiny) number onto every ring.">
+        <span>Density <em>none &rarr; every layer</em></span>
+        <input type="range" name="label_density" value="0.5" min="0" max="1" step="0.05"></label>
+      <label class="check" title="Engrave each number in the glue zone so the next ring covers it - the finished model shows no numbers. Where the glue strip is too narrow the number falls back to the visible ring (see cutting report). The topmost ring stays unnumbered.">
+        <input type="checkbox" name="label_hidden" checked>
+        <span>Hidden after gluing</span></label>
+      <label><span>Font <em>single stroke</em></span>
+        <select name="label_font">
+          <option value="simplex" selected>Hershey Simplex</option>
+          <option value="roman">Hershey Roman</option>
+          <option value="script">Hershey Script</option>
+        </select></label>
+      <label><span>Height <em>mm</em></span>
+        <input type="number" name="label_height_mm" value="3" min="1" step="0.5"></label>
+      <label><span>Control points <em>full &rarr; least</em></span>
+        <input type="range" name="label_simplify" value="0.3" min="0" max="1" step="0.05"></label>
+    </details>
+    <details open>
+      <summary>Hatch areas &middot; polygons</summary>
+      <div id="hatch-list" data-kind="polygon"></div>
+      <div class="shp-drop" data-kind="polygon">
+        <input type="file" accept=".shp" hidden multiple>
+        <span>+ Add or drop polygon shapefile (.shp)&hellip;</span>
+      </div>
+    </details>
+    <details open>
+      <summary>Line features</summary>
+      <div id="line-list" data-kind="line"></div>
+      <div class="shp-drop" data-kind="line">
+        <input type="file" accept=".shp" hidden multiple>
+        <span>+ Add or drop line shapefile (.shp)&hellip;</span>
+      </div>
+    </details>
+    <details open>
+      <summary>Point features</summary>
+      <div id="point-list" data-kind="point"></div>
+      <div class="shp-drop" data-kind="point">
+        <input type="file" accept=".shp" hidden multiple>
+        <span>+ Add or drop point shapefile (.shp)&hellip;</span>
+      </div>
+    </details>
+    <details>
+      <summary>Detail</summary>
+      <label><span>Min curve length <em>mm</em></span>
+        <input type="number" name="min_length_mm" value="10" min="0" step="1"></label>
+      <label><span>Simplify tolerance <em>mm</em></span>
+        <input type="number" name="simplify_mm" value="0.2" min="0" step="0.1"></label>
+    </details>
+  </form>
+
+  <div id="stats" hidden></div>
+  <div id="warnings" hidden></div>
+
+  <button id="export" disabled>Export DXF (ZIP)</button>
+
+  <footer>
+    <div class="legend">
+      <span><i class="box" style="background:#000000"></i>engrave</span>
+      <span><i style="background:#0000ff"></i>score (light)</span>
+      <span><i style="background:#00c800"></i>score (medium)</span>
+      <span><i style="background:#00b4b4"></i>score (strong)</span>
+      <span><i style="background:#ff00ff"></i>cut (inner)</span>
+      <span><i style="background:#ff0000"></i>cut (outer)</span>
+    </div>
+    <a href="https://digital-landscapes.com/" target="_blank" rel="noopener">Digital Landscapes</a>
+    &middot; contour offset method<br>
+    GPLv3 &middot; no warranty &mdash; verify dimensions before cutting
+  </footer>
+</aside>
+
+<main>
+  <nav id="tabs">
+    <button class="tab active" data-tab="sheets">Sheets</button>
+    <button class="tab" data-tab="stack">Stack&nbsp;3D</button>
+    <span id="busy" hidden>slicing&hellip;</span>
+    <span id="stack-hint" hidden>click&nbsp;=&nbsp;select ring &middot; drag&nbsp;=&nbsp;orbit &middot; wheel&nbsp;=&nbsp;zoom &middot; right-drag&nbsp;=&nbsp;pan</span>
+    <span id="sheets-hint" hidden>wheel&nbsp;=&nbsp;zoom &middot; drag&nbsp;=&nbsp;pan &middot; double-click&nbsp;=&nbsp;reset</span>
+  </nav>
+  <canvas id="canvas"></canvas>
+  <div id="stack3d" hidden>
+    <div id="stack-tools" hidden>
+      <button id="st-boards" type="button"
+        title="Shade each ring by the physical board it is cut from - every Nth ring shares a shade (offset method)">board shades</button>
+      <label title="Pull the stack apart vertically to see every ring">explode
+        <input id="st-explode" type="range" min="0" max="1" step="0.02" value="0"></label>
+      <span class="st-sep"></span>
+      <span class="st-word">assembly</span>
+      <button id="st-prev" type="button" title="Assembly: previous step">&lsaquo;</button>
+      <span id="st-step">all</span>
+      <button id="st-next" type="button" title="Assembly: next step (builds the model ring by ring)">&rsaquo;</button>
+    </div>
+    <div id="stack-info" hidden></div>
+  </div>
+  <div id="empty-state">Load a GeoTIFF terrain model to begin.</div>
+  <a id="brandmark" href="https://digital-landscapes.com/" target="_blank" rel="noopener">
+    <img src="/static/logo-dl.png" alt="">
+    <span>&copy; Digital Landscapes</span>
+  </a>
+</main>
+
+<script src="/static/vendor/three.min.js"></script>
+<script src="/static/vendor/OrbitControls.js"></script>
+<script src="/static/app.js?v=16"></script>
+</body>
+</html>
