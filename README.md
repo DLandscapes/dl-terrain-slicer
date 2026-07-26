@@ -1,18 +1,79 @@
-# DL TerrainSlicer
+# DL Terrain Slicer
 
-Standalone replacement for the Grasshopper definition
-`DL-Contour_offset_method_011.gh` — no Rhino needed.
+Turns a digital terrain model into laser-ready DXF files for a stacked
+cardboard contour model, using the
+[horizontal contour offset method](https://digital-landscapes.com/horizontal-contour-model-offset-method/).
+A standalone replacement for the Grasshopper definition
+`DL-Contour_offset_method_011.gh` — no Rhino, no GDAL, no GIS licence.
 
-Reads a **GeoTIFF digital terrain model**, slices it into contour levels at
-material-thickness intervals and distributes them onto **N boards following
-the offset method** (see
-digital-landscapes.com/horizontal-contour-model-offset-method): board k
-carries contours k, k+N, k+2N, … as in-place cutlines. Each cutline does
-double duty — the back cutline of ring i is the outer cutline of ring i+N —
-so **every contour is cut exactly once** and the pieces are rings, not solid
-slabs, which is what saves material and laser time. Boards are then packed
-onto material sheets and exported as **one DXF per sheet** with the six DLF
-laser-pass layers:
+## Getting started
+
+**What you need:** a terrain model as a **GeoTIFF** (`.tif`) — export one from
+QGIS. Optionally shapefiles (`.shp`) for areas, lines or points you want
+scored onto the model. You can try everything without your own data first.
+
+### 1. Download
+
+Open the newest entry under **Releases** (right-hand sidebar) and pick the
+file for your computer:
+
+| Your computer | File |
+|---|---|
+| Windows | `…windows-x64.zip` |
+| Mac with M1/M2/M3/M4 | `…macos-arm64.zip` |
+| Mac with Intel | `…macos-x64.zip` |
+
+### 2. Unpack and run
+
+Unpack the zip somewhere ordinary — Desktop or Documents. **Do not run it
+from inside the zip**; the app needs the whole folder. Then start
+`DL-Terrain-Slicer`.
+
+The first launch your system will warn you that the app is unsigned. It is
+not dangerous — signing requires a yearly developer subscription this project
+does not have.
+
+- **Windows** — "Windows protected your PC": *More info* → *Run anyway*
+- **macOS** — right-click the app → *Open* → *Open*. If macOS still refuses,
+  run `xattr -d com.apple.quarantine <unpacked folder>` once in Terminal.
+
+### 3. Use it
+
+A console window opens and your browser opens the app. **Leave the console
+window alone** — it is the app's engine, and closing it stops the app.
+
+1. Click **load demo terrain** to see how it works before using your own file.
+2. For your own model, drag a GeoTIFF onto the drop area.
+3. Set the **scale** (500 for 1:500) and the **material thickness**. Together
+   these decide the real-world contour interval, shown in the panel.
+4. Set the **number of boards** — the trade-off at the heart of the method:
+   more boards means wider rings and more glue surface, but more material.
+5. Watch **narrowest glue strip**. Under about 2 mm the model becomes
+   difficult to glue; raise the number of boards until it is comfortable.
+6. Look at the **Sheets** and **Stack 3D** views. Stack 3D can step through
+   the assembly ring by ring.
+7. Click **Export DXF (ZIP)**.
+
+### 4. Before you cut
+
+The ZIP holds one DXF per material sheet plus `cutting_report.txt` with your
+settings and assembly notes. **Open the DXF and check the dimensions are what
+you expect before putting anything in the laser.** Layers are named by laser
+pass — run `DLF-05_cut_outer`, the board outline, last.
+
+Your terrain files never leave your computer: the app does all its work
+locally and never sends anything anywhere.
+
+## How the offset method works
+
+The app reads a **GeoTIFF digital terrain model**, slices it into contour
+levels at material-thickness intervals and distributes them onto **N boards
+following the offset method**: board k carries contours k, k+N, k+2N, … as
+in-place cutlines. Each cutline does double duty — the back cutline of ring i
+is the outer cutline of ring i+N — so **every contour is cut exactly once**
+and the pieces are rings, not solid slabs, which is what saves material and
+laser time. Boards are then packed onto material sheets and exported as **one
+DXF per sheet** with the six DLF laser-pass layers:
 
 | pass | layer | color | content |
 |---|---|---|---|
@@ -25,7 +86,7 @@ laser-pass layers:
 
 `DLF-99_sheet` is the sheet boundary for orientation only — never cut it.
 
-## Run
+## Run from source
 
 Double-click `start.bat` (Windows), or from any platform:
 
@@ -43,24 +104,11 @@ First-time setup: `python -m venv .venv` then
 `.venv\Scripts\pip install -r requirements.txt`
 (if a wheel is missing for your Python, use `py -3.12 -m venv .venv`).
 
-## Download (no Python needed)
+## Build the downloads yourself
 
-Packaged builds for Windows and macOS are attached to each
-[release](../../releases): download the zip, unpack it anywhere, run
-`DL-Terrain-Slicer`. Everything is included — there is nothing to install
-and the app never talks to the internet.
-
-**The builds are unsigned**, so both systems will warn you the first time.
-Code signing costs a yearly developer subscription that is not worth it until
-the tool has real users, so:
-
-- **Windows** — SmartScreen says "Windows protected your PC":
-  *More info* → *Run anyway*.
-- **macOS** — Gatekeeper refuses an unidentified developer: right-click the
-  app → *Open* → *Open*. If macOS still refuses, run
-  `xattr -d com.apple.quarantine <unpacked folder>` once in Terminal.
-
-Building them yourself instead is two commands:
+The packaged builds on the [releases page](../../releases) are produced by
+GitHub Actions from `terrainslicer.spec`. Building one locally is two
+commands:
 
 ```
 pip install -r requirements-build.txt
