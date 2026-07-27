@@ -111,7 +111,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > notes.md <<'EOF'
-          Packaged builds — download, unpack, run. No Python needed.
+          Download the **`DL-Terrain-Slicer-…`** file for your system below,
+          unpack it and run it. No Python needed.
+
+          ⚠️ Not "Source code (zip)" / "(tar.gz)" — GitHub adds those to every
+          release automatically. They are the source, and need Python plus a
+          setup step.
+
+          | Your computer | File |
+          |---|---|
+          | Windows | `…windows-x64.zip` |
+          | Mac with M1/M2/M3/M4 | `…macos-arm64.zip` |
+          | Mac with Intel | `…macos-x64.zip` |
+
+          Keep the `_internal` folder next to the program.
 
           The downloads are **unsigned**: on Windows use SmartScreen's
           *More info → Run anyway*, on macOS right-click → *Open*. See the

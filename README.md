@@ -14,20 +14,33 @@ scored onto the model. You can try everything without your own data first.
 
 ### 1. Download
 
-Open the newest entry under **Releases** (right-hand sidebar) and pick the
-file for your computer:
+In the right-hand sidebar, under **Releases**, click the newest release
+(e.g. "DL Terrain Slicer v0.1.0") — the *name*, not just the sidebar box.
+That opens the release page. Scroll to the bottom, to **Assets**, and pick
+the file for your computer:
 
 | Your computer | File |
 |---|---|
-| Windows | `…windows-x64.zip` |
-| Mac with M1/M2/M3/M4 | `…macos-arm64.zip` |
-| Mac with Intel | `…macos-x64.zip` |
+| Windows | `DL-Terrain-Slicer-…-windows-x64.zip` |
+| Mac with M1/M2/M3/M4 | `DL-Terrain-Slicer-…-macos-arm64.zip` |
+| Mac with Intel | `DL-Terrain-Slicer-…-macos-x64.zip` |
+
+> ⚠️ **Not "Source code (zip)" or "Source code (tar.gz)".** GitHub adds those
+> two to every release automatically, and they sit right below the file you
+> want. They contain the Python source, which needs Python installed and a
+> setup step — download one of those by mistake and you get a `start.bat`
+> that reports a missing environment and closes. The app is the
+> `DL-Terrain-Slicer-…` file.
 
 ### 2. Unpack and run
 
 Unpack the zip somewhere ordinary — Desktop or Documents. **Do not run it
-from inside the zip**; the app needs the whole folder. Then start
-`DL-Terrain-Slicer`.
+from inside the zip**; the app needs the whole folder. Inside you get
+`DL-Terrain-Slicer` (the program) next to an `_internal` folder — keep them
+together, the program will not start on its own.
+
+Then run **`DL-Terrain-Slicer`**. There is no `start.bat` here; that file
+belongs to the source code and needs Python.
 
 The first launch your system will warn you that the app is unsigned. It is
 not dangerous — signing requires a yearly developer subscription this project
