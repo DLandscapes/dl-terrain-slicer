@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       macos:
-        description: "Also build macOS (10x Actions minutes while the repo is private)"
+        description: "Also build macOS (costs ~100 billed minutes - tags always do)"
         type: boolean
         default: false
 
@@ -52,10 +52,11 @@ jobs:
           if-no-files-found: error
 
   macos:
-    # While the repo is private, macOS runners bill at a 10x multiplier and
-    # eat the free allowance in a few builds - so they are opt-in until the
-    # repo goes public, when this condition turns itself off.
-    if: ${{ !github.event.repository.private || inputs.macos }}
+    # Every release gets macOS builds. Manual runs do not unless asked for:
+    # macOS runners bill at a 10x multiplier, so a release costs roughly 100
+    # of the 2000 free minutes a month - fine for releases, wasteful for
+    # iterating on a Windows-only change.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.macos }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
