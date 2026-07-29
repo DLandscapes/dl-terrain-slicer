@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 18;
+const EXPECTED_BUILD = 19;
 
 /* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
  * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
@@ -67,6 +67,11 @@ const ctx = canvas.getContext("2d");
 /* ---------- upload ---------- */
 const dropzone = $("#dropzone");
 const fileInput = $("#file-input");
+if (!api.supportsMesh) {
+  // do not invite a file the build is only going to refuse
+  fileInput.accept = ".tif,.tiff";
+  $("#drop-hint strong").textContent = "Drop a GeoTIFF DTM here";
+}
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
@@ -83,13 +88,39 @@ $("#demo-link").addEventListener("click", async (e) => {
   e.stopPropagation();
   setBusy(true);
   try {
-    applyUpload(await api.demo());
+    const data = await api.demo();
+    fitScaleToSheet(data.summary);
+    applyUpload(data);
   } catch (err) {
     alert("Demo failed: " + err.message);
   } finally {
     setBusy(false);
   }
 });
+
+/* The demo terrain is 1.5 km across, so at the default 1:500 its board is
+ * 3000 mm - larger than any sheet, and the first thing a first-time visitor
+ * sees would be "0 sheets". Coarsen the scale just enough that the board fits,
+ * and only for the demo: a real terrain is the user's own business. */
+function fitScaleToSheet(summary) {
+  const scaleInput = $("input[name=scale]");
+  const num = (name, fallback) => {
+    const v = parseFloat($(`input[name=${name}]`).value);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  const margin = num("sheet_margin_mm", 10);
+  const usableW = num("sheet_width_mm", 1000) - 2 * margin;
+  const usableH = num("sheet_height_mm", 700) - 2 * margin;
+  const w = summary.width_world * 1000;   // model mm at 1:1
+  const h = summary.height_world * 1000;
+  if (usableW <= 0 || usableH <= 0 || !(w > 0) || !(h > 0)) return;
+  // nest() may turn a board 90 degrees, so take whichever way round is easier
+  const need = Math.min(Math.max(w / usableW, h / usableH),
+                        Math.max(h / usableW, w / usableH));
+  const current = num("scale", 0);
+  if (current >= need) return;            // already fits, leave it alone
+  scaleInput.value = Math.ceil(need / 50) * 50;
+}
 
 async function uploadFile(file) {
   setBusy(true);

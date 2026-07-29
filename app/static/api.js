@@ -246,3 +246,9 @@ function wasmApi() {
 }
 
 const api = TS_WASM ? wasmApi() : serverApi();
+
+/* OBJ meshes go through the per-triangle rasteriser in slicer/meshload.py,
+ * which is far too slow under WebAssembly - checkTerrainFile() refuses them in
+ * wasm mode. Expose that as a capability so the UI can stop offering meshes it
+ * is only going to reject; app.js still never learns which transport it got. */
+api.supportsMesh = !TS_WASM;
