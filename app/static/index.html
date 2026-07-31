@@ -7,14 +7,14 @@
 <!-- asset paths are RELATIVE on purpose: the browser build is hosted in a
      sub-directory (e.g. /terrain-slicer/v1/), the server build at / -->
 <link rel="icon" type="image/png" href="static/logo-dl.png">
-<link rel="stylesheet" href="static/style.css?v=18">
+<link rel="stylesheet" href="static/style.css?v=21">
 </head>
 <body>
 <aside id="sidebar">
   <header>
     <img id="logo" src="static/logo-dl.png" alt="Digital Landscapes">
     <div>
-      <h1>DL&nbsp;Terrain&nbsp;Slicer</h1>
+      <h1>Terrain&nbsp;Slicer</h1>
       <p class="sub">Terrain &rarr; laser-cut contour model</p>
     </div>
   </header>
@@ -162,6 +162,22 @@
       <button id="st-next" type="button" title="Assembly: next step (builds the model ring by ring)">&rsaquo;</button>
     </div>
     <div id="stack-info" hidden></div>
+    <!-- Axis gizmo, top right - same control as DL-TerrainCare's, so the DL
+         tools navigate identically. A named view is one click and parallel-
+         projected by default, because a "top view" that still converges is
+         not a plan; pressing the same button again returns to the view you
+         came from. -->
+    <div id="gizmo" hidden>
+      <div class="grid">
+        <button type="button" data-view="top">Top</button>
+        <button type="button" data-view="front">Front</button>
+        <button type="button" data-view="right">Right</button>
+        <button type="button" data-view="bottom">Bot</button>
+        <button type="button" data-view="back">Back</button>
+        <button type="button" data-view="left">Left</button>
+      </div>
+      <button id="proj" class="proj" type="button">Perspective</button>
+    </div>
   </div>
   <div id="empty-state">Load a GeoTIFF terrain model to begin.</div>
   <a id="brandmark" href="https://digital-landscapes.com/" target="_blank" rel="noopener">
@@ -184,7 +200,7 @@
 <script src="static/vendor/three.min.js"></script>
 <script src="static/vendor/OrbitControls.js"></script>
 <!-- TS_MODE is injected here by web/build.py for the browser build -->
-<script src="static/api.js?v=19"></script>
-<script src="static/app.js?v=19"></script>
+<script src="static/api.js?v=21"></script>
+<script src="static/app.js?v=21"></script>
 </body>
 </html>

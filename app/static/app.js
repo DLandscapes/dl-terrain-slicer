@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 19;
+const EXPECTED_BUILD = 21;
 
 /* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
  * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
@@ -434,6 +434,7 @@ function draw() {
   canvas.hidden = isStack;
   $("#stack3d").hidden = !isStack;
   $("#stack-tools").hidden = !state.result;
+  $("#gizmo").hidden = !state.result;
   $("#stack-hint").hidden = !isStack || !state.result;
   $("#sheets-hint").hidden = isStack || !state.result;
   canvas.classList.toggle("pannable", !isStack && !!state.result);
@@ -576,11 +577,26 @@ function ensureThree() {
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xffffff);
+  // Fades the ground grid out into the background so it reads as infinite
+  // instead of ending at a visible square edge. Fog is applied per fragment,
+  // so the fade is smooth ALONG each grid line - a vertex-colour fade cannot
+  // do this, because every grid line spans the whole extent and both of its
+  // endpoints sit at maximum radius. Range is refreshed per frame in the loop
+  // below so the effect holds at any zoom. Only the grid is fogged; the
+  // terrain materials opt out with `fog: false`.
+  scene.fog = new THREE.Fog(0xffffff, 1, 2);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 500000);
   camera.up.set(0, 0, 1);
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.12;
+  /* The orthographic camera mirrors the perspective one every frame - same
+   * position, same look-at, frustum sized from the perspective FOV at the
+   * current orbit distance, so toggling projections reads as a change of
+   * projection rather than a jump. OrbitControls keeps driving the
+   * perspective camera either way; ortho is only ever a projection mirror. */
+  const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, 500000);
+  orthoCamera.up.set(0, 0, 1);
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
   const sun = new THREE.DirectionalLight(0xffffff, 0.75);
   sun.position.set(0.6, -1, 1.4);
@@ -605,20 +621,114 @@ function ensureThree() {
     const mouse = new THREE.Vector2(
       ((e.clientX - r.left) / r.width) * 2 - 1,
       -((e.clientY - r.top) / r.height) * 2 + 1);
-    camera.updateMatrixWorld(true);
-    ray.setFromCamera(mouse, camera);
+    const pickCam = axis.orthographic ? orthoCamera : camera;
+    pickCam.updateMatrixWorld(true);
+    ray.setFromCamera(mouse, pickCam);
     const hits = ray.intersectObjects(
       stackView.items.filter((it) => it.mesh.visible).map((it) => it.mesh));
     const lvl = hits.length ? hits[0].object.userData.level : null;
     stackView.selectedLevel = lvl === stackView.selectedLevel ? null : lvl;
     applyStackAppearance();
   });
+  /* ---- axis views (Top/Front/..., ported from DL-TerrainCare) ----
+   * Orthographic by default, because a "top view" that still converges is not
+   * a plan. Pressing the same button again RETURNS to the view you were in
+   * before; the stored return view survives switching between axis views and
+   * is discarded the moment the camera is moved by hand. */
+  const axis = { orthographic: false, ret: null, anim: null };
+  const nearlyTop = 1.5533; // just under pi/2: exactly vertical loses azimuth
+  const AXIS_VIEWS = {
+    top: { yaw: 0, pitch: nearlyTop },
+    bottom: { yaw: 0, pitch: -nearlyTop },
+    front: { yaw: Math.PI, pitch: 0.02 },   // looking north, from the south
+    back: { yaw: 0, pitch: 0.02 },          // looking south, from the north
+    right: { yaw: Math.PI / 2, pitch: 0.02 },
+    left: { yaw: -Math.PI / 2, pitch: 0.02 },
+  };
+  const camState = () => ({
+    pos: camera.position.clone(), target: controls.target.clone(),
+  });
+  function moveCamera(to, seconds) {
+    if (seconds <= 0) {
+      camera.position.copy(to.pos);
+      controls.target.copy(to.target);
+      controls.update();
+      return;
+    }
+    axis.anim = { from: camState(), to, t0: performance.now(), dur: seconds * 1000 };
+  }
+  function setAxisView(name) {
+    const v = AXIS_VIEWS[name];
+    if (!v) return false;
+    if (axis.ret && axis.ret.name === name) {           // second press: go back
+      const back = axis.ret;
+      axis.ret = null;
+      axis.orthographic = back.orthographic;            // projection is part of the view
+      syncProjButton();
+      moveCamera(back.state, 0.45);
+      return true;
+    }
+    if (axis.ret) axis.ret.name = name;                 // axis-to-axis: keep the origin
+    else axis.ret = { name, state: camState(), orthographic: axis.orthographic };
+    axis.orthographic = true;
+    syncProjButton();
+    const t = controls.target;
+    const dist = camera.position.distanceTo(t);
+    const cp = Math.cos(v.pitch), sp = Math.sin(v.pitch);
+    moveCamera({
+      pos: new THREE.Vector3(t.x + dist * cp * Math.sin(v.yaw),
+                             t.y + dist * cp * Math.cos(v.yaw),
+                             t.z + dist * sp),
+      target: t.clone(),
+    }, 0.45);
+    return false;
+  }
+  function syncProjButton() {
+    const b = $("#proj");
+    b.textContent = axis.orthographic ? "Orthographic" : "Perspective";
+    b.classList.toggle("on", axis.orthographic);
+  }
+  for (const b of document.querySelectorAll("#gizmo .grid button")) {
+    b.addEventListener("click", () => setAxisView(b.dataset.view));
+  }
+  $("#proj").addEventListener("click", () => {
+    axis.orthographic = !axis.orthographic;
+    syncProjButton();
+  });
+  // a hand-moved camera means the axis view stopped being "a detour from" anywhere
+  controls.addEventListener("start", () => { axis.ret = null; axis.anim = null; });
+
   three = { renderer, scene, camera, controls, group };
   (function loop() {
     requestAnimationFrame(loop);
     if (state.tab === "stack" && !$("#stack3d").hidden) {
+      if (axis.anim) {
+        const a = axis.anim;
+        const u = Math.min(1, (performance.now() - a.t0) / a.dur);
+        const e = 0.5 - 0.5 * Math.cos(Math.PI * u);    // inOutSine
+        camera.position.lerpVectors(a.from.pos, a.to.pos, e);
+        controls.target.lerpVectors(a.from.target, a.to.target, e);
+        if (u >= 1) axis.anim = null;
+      }
       controls.update();
-      renderer.render(scene, camera);
+      // keep the grid's horizon proportional to how far the camera is out,
+      // so it fades at the same visual depth whether zoomed in or out
+      const d = camera.position.distanceTo(controls.target);
+      scene.fog.near = d * 1.0;
+      scene.fog.far = d * 3.0;
+      let cam = camera;
+      if (axis.orthographic) {
+        const o = orthoCamera;
+        o.position.copy(camera.position);
+        o.quaternion.copy(camera.quaternion);
+        const halfH = Math.tan((camera.fov * Math.PI) / 360) * d;
+        const halfW = halfH * (camera.aspect || 1);
+        o.left = -halfW; o.right = halfW; o.top = halfH; o.bottom = -halfH;
+        o.near = camera.near; o.far = camera.far;
+        o.updateProjectionMatrix();
+        cam = o;
+      }
+      renderer.render(scene, cam);
     }
   })();
   return three;
@@ -668,20 +778,25 @@ function buildStack3D() {
       shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
     }
     const geo = new THREE.ExtrudeGeometry(shape, { depth: th, bevelEnabled: false, curveSegments: 4 });
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial());
+    // fog:false - the scene fog exists only to fade the ground grid out;
+    // the model itself must stay crisp at any distance
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ fog: false }));
     mesh.userData.level = e.level;
     t.group.add(mesh);
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geo, 25),
-      new THREE.LineBasicMaterial({ color: 0x3c3c3c, transparent: true, opacity: 0.4 }));
+      new THREE.LineBasicMaterial({ color: 0x3c3c3c, transparent: true, opacity: 0.4, fog: false }));
     t.group.add(edges);
     stackView.items.push({ mesh, edges, level: e.level, board: e.level % stats.n_boards });
   }
   stackView.levels = [...new Set(stackView.items.map((it) => it.level))].sort((a, b) => a - b);
 
-  // ground grid (50 mm cells, or coarser for big models)
-  const size = Math.max(W, H) * 1.7;
-  const cell = size > 1500 ? 100 : 50;
+  // ground grid (50 mm cells, or coarser for big models). The grid is drawn far
+  // past the model and fogged out (see scene.fog) so no edge is ever visible -
+  // cell size still follows the MODEL, not the extended grid.
+  const span = Math.max(W, H);
+  const cell = span * 1.7 > 1500 ? 100 : 50;
+  const size = span * 14;
   const grid = new THREE.GridHelper(size, Math.max(2, Math.round(size / cell)), 0xcccccc, 0xe6e6e6);
   grid.rotation.x = Math.PI / 2;
   grid.position.set(W / 2, H / 2, -0.1);
