@@ -109,7 +109,11 @@ def selftest(port: int) -> int:
     except Exception as exc:  # noqa: BLE001 - the message is the point
         print(f"SELFTEST FAILED: could not serve the page: {exc}")
         return 1
-    if b"DL&nbsp;Terrain&nbsp;Slicer" not in shell:
+    # A STRUCTURAL marker, not display text: checking for the app title here
+    # broke the CI selftest on every platform the day the title was reworded
+    # (build 21, "DL Terrain Slicer" -> "Terrain Slicer"). The dropzone is the
+    # app's core element and its id is not subject to wording passes.
+    if b'id="dropzone"' not in shell:
         print("SELFTEST FAILED: index.html was served but looks wrong")
         return 1
     print(f"SELFTEST OK: build {APP_BUILD} serving on port {port}")
