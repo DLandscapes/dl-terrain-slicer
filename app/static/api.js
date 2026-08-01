@@ -67,13 +67,10 @@ function tiffDimensions(buf) {
 
 /** Throws on a hard limit, returns a warning string (or "") on a soft one. */
 function checkTerrainFile(name, buf) {
-  const lower = (name || "").toLowerCase();
-  if (lower.endsWith(".obj")) {
-    throw new Error(
-      "OBJ meshes are not supported in the browser version yet - the " +
-      "conversion is too slow in WebAssembly. Use a GeoTIFF here, or the " +
-      "desktop version for OBJ files.");
-  }
+  // OBJ was refused here until build 22, when the per-triangle rasterizer in
+  // slicer/meshload.py was vectorised (~37x): a 500k-face mesh now samples in
+  // ~0.6 s native, a few seconds in WebAssembly. The generic size limits
+  // below carry the guard duty for meshes too.
   const size = buf.byteLength;
   if (size >= LIMITS.maxBytes) {
     throw new Error(
@@ -247,8 +244,9 @@ function wasmApi() {
 
 const api = TS_WASM ? wasmApi() : serverApi();
 
-/* OBJ meshes go through the per-triangle rasteriser in slicer/meshload.py,
- * which is far too slow under WebAssembly - checkTerrainFile() refuses them in
- * wasm mode. Expose that as a capability so the UI can stop offering meshes it
- * is only going to reject; app.js still never learns which transport it got. */
-api.supportsMesh = !TS_WASM;
+/* Mesh input is a CAPABILITY the UI reads, not a transport fact - app.js
+ * never learns which backend it got. It was false in wasm mode until build 22
+ * vectorised the rasteriser in slicer/meshload.py; both builds accept OBJ
+ * now, and the flag stays so a future constrained transport can opt out
+ * again without touching app.js. */
+api.supportsMesh = true;

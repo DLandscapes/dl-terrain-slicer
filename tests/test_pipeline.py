@@ -370,6 +370,73 @@ f 1 3 4
     assert result.pieces
 
 
+def test_rasterize_matches_per_triangle_reference():
+    """The vectorised rasteriser (build 22) must reproduce the original
+    per-triangle loop bit for bit - same barycentric arithmetic, same window
+    rounding, same NaN-means-empty semantics. A random rugged mesh exercises
+    mixed window shapes, shared edges (duplicate cells across faces) and
+    degenerate triangles."""
+    import math
+
+    import numpy as np
+
+    from slicer.meshload import rasterize
+
+    rng = np.random.default_rng(7)
+    n = 24
+    gx, gy = np.meshgrid(np.linspace(0, 90, n), np.linspace(0, 60, n))
+    verts = np.column_stack([
+        (gx + rng.uniform(-1.4, 1.4, gx.shape)).ravel(),
+        (gy + rng.uniform(-1.4, 1.4, gy.shape)).ravel(),
+        rng.uniform(0, 25, gx.size),
+    ])
+    faces = []
+    for r in range(n - 1):
+        for c in range(n - 1):
+            a = r * n + c
+            faces.append((a, a + 1, a + n))
+            faces.append((a + 1, a + n + 1, a + n))
+    faces.append((0, 1, 1))  # degenerate: must be skipped, not crash
+    faces = np.asarray(faces, dtype=np.int32)
+    px, py, pz = verts[:, 0], verts[:, 1], verts[:, 2]
+    cell = 1.7
+
+    def reference(px, py, pz, faces, cell):
+        x0, y0 = float(px.min()), float(py.min())
+        nx = max(2, int(math.ceil((px.max() - x0) / cell)) + 1)
+        ny = max(2, int(math.ceil((py.max() - y0) / cell)) + 1)
+        grid = np.full((ny, nx), np.nan, dtype=np.float32)
+        fx, fy, fz = px[faces], py[faces], pz[faces]
+        for i in range(len(faces)):
+            xs, ys, zs = fx[i], fy[i], fz[i]
+            det = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
+            if abs(det) < 1e-9:
+                continue
+            i0 = int((xs.min() - x0) / cell)
+            i1 = int((xs.max() - x0) / cell) + 2
+            j0 = int((ys.min() - y0) / cell)
+            j1 = int((ys.max() - y0) / cell) + 2
+            ax = x0 + np.arange(i0, min(i1, nx)) * cell
+            ay = y0 + np.arange(j0, min(j1, ny)) * cell
+            if not len(ax) or not len(ay):
+                continue
+            GX, GY = np.meshgrid(ax, ay)
+            w0 = ((ys[1] - ys[2]) * (GX - xs[2]) + (xs[2] - xs[1]) * (GY - ys[2])) / det
+            w1 = ((ys[2] - ys[0]) * (GX - xs[2]) + (xs[0] - xs[2]) * (GY - ys[2])) / det
+            w2 = 1.0 - w0 - w1
+            mask = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not mask.any():
+                continue
+            zval = w0 * zs[0] + w1 * zs[1] + w2 * zs[2]
+            win = grid[j0:min(j1, ny), i0:min(i1, nx)]
+            win[...] = np.where(mask, np.fmax(win, zval.astype(np.float32)), win)
+        return grid[::-1]
+
+    got, _, _ = rasterize(px, py, pz, faces, cell)
+    want = reference(px, py, pz, faces, cell)
+    assert np.array_equal(got, want, equal_nan=True)
+
+
 def _mini_shp(rings) -> bytes:
     """Build a minimal one-record polygon .shp (outer rings CW)."""
     import struct

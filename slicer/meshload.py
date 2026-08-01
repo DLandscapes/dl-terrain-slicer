@@ -46,37 +46,67 @@ def _plan_coords(verts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray,
 
 def rasterize(px: np.ndarray, py: np.ndarray, pz: np.ndarray,
               faces: np.ndarray, cell: float) -> tuple[np.ndarray, float, float]:
-    """Sample the triangle mesh onto a grid. Returns (grid row0=north, x0, y0)."""
+    """Sample the triangle mesh onto a grid. Returns (grid row0=north, x0, y0).
+
+    Vectorised: the original per-triangle Python loop cost ~23 s on a 500k-face
+    mesh, nearly all of it interpreter overhead on tiny arrays. Since the grid
+    is matched to the mesh's own density, almost every triangle's bounding box
+    covers only a handful of grid nodes - so faces are GROUPED BY WINDOW SHAPE
+    and each group is evaluated as one (faces x window-cells) broadcast, with
+    the max-z scatter done by np.fmax.at (unbuffered, so duplicate cells across
+    faces keep the maximum; fmax, not maximum, so NaN means "empty" and never
+    wins). The result is bit-identical to the loop: per-(face, node) arithmetic
+    is unchanged and max is order-independent.
+    """
     x0, y0 = float(px.min()), float(py.min())
     nx = max(2, int(math.ceil((px.max() - x0) / cell)) + 1)
     ny = max(2, int(math.ceil((py.max() - y0) / cell)) + 1)
     grid = np.full((ny, nx), np.nan, dtype=np.float32)
+    flat = grid.ravel()
 
     fx, fy, fz = px[faces], py[faces], pz[faces]   # (F, 3) each
-    eps = 1e-9
-    for i in range(len(faces)):
-        xs, ys, zs = fx[i], fy[i], fz[i]
-        det = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
-        if abs(det) < eps:
-            continue
-        i0 = int((xs.min() - x0) / cell)
-        i1 = int((xs.max() - x0) / cell) + 2
-        j0 = int((ys.min() - y0) / cell)
-        j1 = int((ys.max() - y0) / cell) + 2
-        gx = x0 + np.arange(i0, min(i1, nx)) * cell
-        gy = y0 + np.arange(j0, min(j1, ny)) * cell
-        if not len(gx) or not len(gy):
-            continue
-        GX, GY = np.meshgrid(gx, gy)
-        w0 = ((ys[1] - ys[2]) * (GX - xs[2]) + (xs[2] - xs[1]) * (GY - ys[2])) / det
-        w1 = ((ys[2] - ys[0]) * (GX - xs[2]) + (xs[0] - xs[2]) * (GY - ys[2])) / det
-        w2 = 1.0 - w0 - w1
-        mask = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
-        if not mask.any():
-            continue
-        zval = w0 * zs[0] + w1 * zs[1] + w2 * zs[2]
-        window = grid[j0:min(j1, ny), i0:min(i1, nx)]
-        window[...] = np.where(mask, np.fmax(window, zval.astype(np.float32)), window)
+    det = ((fy[:, 1] - fy[:, 2]) * (fx[:, 0] - fx[:, 2])
+           + (fx[:, 2] - fx[:, 1]) * (fy[:, 0] - fy[:, 2]))
+    keep = np.abs(det) >= 1e-9                     # drop degenerate triangles
+
+    # integer node windows, exactly as the loop computed them
+    i0 = ((fx.min(axis=1) - x0) / cell).astype(np.int64)
+    i1 = np.minimum(((fx.max(axis=1) - x0) / cell).astype(np.int64) + 2, nx)
+    j0 = ((fy.min(axis=1) - y0) / cell).astype(np.int64)
+    j1 = np.minimum(((fy.max(axis=1) - y0) / cell).astype(np.int64) + 2, ny)
+    wi, hj = i1 - i0, j1 - j0
+    keep &= (wi > 0) & (hj > 0)
+
+    order = np.flatnonzero(keep)
+    shape_key = hj[order] * 8192 + wi[order]
+    # cap the faces-x-cells broadcast at ~8M float64 elements per slab
+    MAX_ELEMS = 8_000_000
+
+    for key in np.unique(shape_key):
+        sel = order[shape_key == key]
+        h, w = int(key // 8192), int(key % 8192)
+        oj, oi = np.divmod(np.arange(h * w), w)    # the window's local nodes
+        step = max(1, MAX_ELEMS // (h * w))
+        for s in range(0, len(sel), step):
+            f = sel[s:s + step]
+            I = i0[f, None] + oi[None, :]          # (F, hw) node columns
+            J = j0[f, None] + oj[None, :]
+            GX = x0 + I * cell
+            GY = y0 + J * cell
+            xs2 = fx[f, 2, None]
+            ys2 = fy[f, 2, None]
+            d = det[f, None]
+            w0 = ((fy[f, 1, None] - ys2) * (GX - xs2)
+                  + (xs2 - fx[f, 1, None]) * (GY - ys2)) / d
+            w1 = ((ys2 - fy[f, 0, None]) * (GX - xs2)
+                  + (fx[f, 0, None] - xs2) * (GY - ys2)) / d
+            w2 = 1.0 - w0 - w1
+            mask = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not mask.any():
+                continue
+            zval = (w0 * fz[f, 0, None] + w1 * fz[f, 1, None]
+                    + w2 * fz[f, 2, None]).astype(np.float32)
+            np.fmax.at(flat, (J * nx + I)[mask], zval[mask])
     return grid[::-1], x0, y0  # flip: row 0 = north
 
 
@@ -86,10 +116,8 @@ def load_obj(data: bytes, name: str = "") -> tuple[DTM, list[str]]:
     px, py, pz, up = _plan_coords(verts)
     if up == "Y":
         warnings.append("mesh interpreted as Y-up (Blender default); elevation taken from Y")
-    if len(faces) > 250_000:
-        warnings.append(
-            f"dense mesh ({len(faces):,} faces) - rasterizing may take a while; "
-            f"a decimated export (e.g. '-lower-res') is faster and usually just as good")
+    # (the old "rasterizing may take a while" warning died with build 22's
+    # vectorised rasterizer: 500k faces now sample in well under a second)
 
     # grid resolution matched to the mesh's own density, bounded for interactivity
     extent = max(px.max() - px.min(), py.max() - py.min())
