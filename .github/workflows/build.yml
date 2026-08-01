@@ -64,7 +64,11 @@ jobs:
         include:
           - runner: macos-14
             label: macos-arm64
-          - runner: macos-13
+          # macos-13 was RETIRED by GitHub in Dec 2025 - jobs targeting it
+          # queue forever (run #4 sat 5.5 h without a runner). macos-15-intel
+          # is the last x86_64 image Actions will ever offer; it goes away
+          # Aug 2027, and with it the Intel download.
+          - runner: macos-15-intel
             label: macos-x64
     steps:
       - uses: actions/checkout@v4
