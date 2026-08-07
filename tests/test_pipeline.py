@@ -437,6 +437,42 @@ def test_rasterize_matches_per_triangle_reference():
     assert np.array_equal(got, want, equal_nan=True)
 
 
+def test_lzw_geotiff_without_imagecodecs():
+    """QGIS and GDAL write LZW-compressed GeoTIFFs by default, float DEMs
+    usually with the floating-point predictor (tag 317 = 3). Pyodide has no
+    imagecodecs, so slicer.tiffcodecs must decode both. The two fixtures were
+    written by tifffile WITH the real imagecodecs (ground truth, round-trip
+    verified at generation time); here they must decode identically through
+    whatever codec path is active - the real package if installed, the
+    pure-Python fallback otherwise. A first real user hit exactly this on
+    launch day (2026-08-05)."""
+    import base64
+    import io
+
+    import numpy as np
+    import tifffile
+
+    from slicer import tiffcodecs
+
+    tiffcodecs.install()
+
+    ARR = np.frombuffer(base64.b64decode(
+        'RmWdQpPGd0Ib3KVCn7yVQuHVMkLvj7FCLR2cQj+bnkJrnzlCwxN6QtwoakIvraxC8mKQQrNGokLPrnhCn3JNQl91h0JywyxCXMOiQpwqj0IMz5tCAADAf98RsULnT6lCntadQoDtRkIeWH1CwcIoQp/bPkIOTpRC6XmaQkDAsEJCKmFCiRdqQkLpfULv5EVC+/s5Qhgkf0LCYU1CPfuSQi5ud0KQRKNCyQaWQix5XkLaOaNC+HmgQuV+bUJmqllC4z+UQlTzO0JN+0dC83ghQkSxnkIvfJJCPISWQqoSnkJ9yHtCxt+IQpv1O0Lx5zZCHteSQiA4fkILhohC'
+    ), dtype=np.float32).reshape(7, 9)
+    LZW_NOPRED = 'SUkqAAgAAAAQAAABBAABAAAACQAAAAEBBAABAAAABwAAAAIBAwABAAAAIAAAAAMBAwABAAAABQAAAAYBAwABAAAAAQAAAA4BAgASAAAAzgAAABEBBAABAAAAMAEAABUBAwABAAAAAQAAABYBBAABAAAABwAAABcBBAABAAAABwEAABoBBQABAAAA8AAAABsBBQABAAAA+AAAACgBAwABAAAAAQAAADEBAgAMAAAAAAEAAFMBAwABAAAAAwAAAA6DDAADAAAADAEAAAAAAAB7InNoYXBlIjogWzcsIDldfQAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAABAAAAAQAAAHRpZmZmaWxlLnB5AAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAIARjKnSEk2MdyEG24pSEn14lSE4WqMiE70esSELQ6nCEP02niEa0+OSEwwmeiE3BQaiEL1arCE8jEkCEsyMoiEz1ceIaciaQi+dUOQjkwxYQi4w5wnBUjyEDGemyEAAAwD+3wjGHOT1SQk81oIgHaRiEHiwfSEwWEKIa2x8QgcTkoQnSeU0QiAwFgQiEKjCQkSF5ZdLQ73IRSE+33JAwJD+QmEYZ+PX2kiELjdCEgRFGQmSBksQhYeS8Qm0Oc6+DyoCE5T8bSEZlUWSE4x/cyo8x2Qia+yOQnmeBCQiIsZALz5lh4hNCqglID6yD2QmM30QQk29d28XONrK18sIBwfiEC0N14CA'
+    LZW_FLOATPRED = 'SUkqAAgAAAARAAABBAABAAAACQAAAAEBBAABAAAABwAAAAIBAwABAAAAIAAAAAMBAwABAAAABQAAAAYBAwABAAAAAQAAAA4BAgASAAAA2gAAABEBBAABAAAAMAEAABUBAwABAAAAAQAAABYBBAABAAAABwAAABcBBAABAAAA7wAAABoBBQABAAAA/AAAABsBBQABAAAABAEAACgBAwABAAAAAQAAADEBAgAMAAAADAEAAD0BAwABAAAAAwAAAFMBAwABAAAAAwAAAA6DDAADAAAAGAEAAAAAAAB7InNoYXBlIjogWzcsIDldfQAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAABAAAAAQAAAHRpZmZmaWxlLnB5AAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAAIAQgBA4JAy22hc8E6f3WAk2LDCFnAGV0jj8BFOTUQhCEDh8EhZAoLBBw8CE5Ak1mqOlK5wqhVq5DQxAGTgAGSmw2CHGgwAnIh6w4KYHaDBK8Xw9FSNyMZ1KMQiPkOFzWBCAcHo3wQt3EnpFIwA5gsVgMFliCQmyD6GTmKyOana0n23W8b22VwER1yra/I3uRmcRXKLHmyCKWBSPU0c2swjmwGEHVUe3iYhyY1dfYKXma7B2pwY2j69HOBRYlVoCD6OWWfHagT6cXypii681BCoCG6DVm+y47AU/EctguFnk8DCTlsbmmSWqVhaAnXAQ'
+
+    for name, b64 in (("nopred", LZW_NOPRED), ("floatpred", LZW_FLOATPRED)):
+        with tifffile.TiffFile(io.BytesIO(base64.b64decode(b64))) as t:
+            got = t.pages[0].asarray()
+        assert np.array_equal(got, ARR, equal_nan=True), f"LZW {name} mismatch"
+
+    # and the codecs stand alone: a raw LZW round trip against a known vector
+    raw = tiffcodecs.lzw_decode(
+        base64.b64decode(b'gBIMpsNhvEECgkGhEFEMBA=='))  # imagecodecs.lzw_encode ground truth
+    assert raw == b"Hello Hello Hello!"
+
+
 def _mini_shp(rings) -> bytes:
     """Build a minimal one-record polygon .shp (outer rings CW)."""
     import struct

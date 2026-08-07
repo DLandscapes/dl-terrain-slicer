@@ -46,7 +46,7 @@ STATIC_DIRS = ["fonts", "vendor"]
 ZIP_MEMBERS = [
     "slicer/__init__.py", "slicer/dtm.py", "slicer/params.py", "slicer/contours.py",
     "slicer/nesting.py", "slicer/dxfout.py", "slicer/hatch.py", "slicer/meshload.py",
-    "slicer/stroke_font.py", "slicer/hershey_data.py",
+    "slicer/stroke_font.py", "slicer/hershey_data.py", "slicer/tiffcodecs.py",
     # app/ has no __init__.py - it is an implicit namespace package, which
     # works the same once the archive is unpacked next to sys.path
     "app/core.py", "app/demo.py", "app/png.py",

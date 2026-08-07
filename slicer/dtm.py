@@ -12,6 +12,12 @@ from dataclasses import dataclass
 import numpy as np
 import tifffile
 
+from . import tiffcodecs
+
+# QGIS/GDAL write LZW (often with the float predictor) by default; without
+# this, every such file fails with "requires the 'imagecodecs' package".
+tiffcodecs.install()
+
 
 @dataclass
 class DTM:
