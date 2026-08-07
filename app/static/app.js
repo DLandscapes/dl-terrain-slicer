@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 23;
+const EXPECTED_BUILD = 24;
 
 /* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
  * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
