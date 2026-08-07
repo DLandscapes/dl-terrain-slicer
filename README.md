@@ -248,6 +248,5 @@ Python, NumPy, Shapely, ContourPy, tifffile, ezdxf, FastAPI, uvicorn,
 Pyodide, three.js, the Hershey stroke fonts, and the Source Sans 3 and
 Quattrocento Sans typefaces (OFL).
 
-Developed by Digital Landscapes **with AI assistance** (Anthropic's Claude —
-see the co-author trailers in the commit history). Design decisions, the
-offset method itself and all verification are Digital Landscapes' own.
+Developed by Digital Landscapes **with AI assistance**. Design decisions,
+the offset method itself and all verification are Digital Landscapes' own.
