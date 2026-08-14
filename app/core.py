@@ -28,7 +28,7 @@ from app.png import hillshade_png
 # tags in app/static/index.html. The frontend compares this at startup and
 # tells the user to restart the server if the running process is older than
 # the files on disk.
-APP_BUILD = 24
+APP_BUILD = 25
 
 MAX_UPLOADS = 8
 

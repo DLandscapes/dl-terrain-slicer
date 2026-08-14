@@ -1,7 +1,45 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 24;
+const EXPECTED_BUILD = 25;
+
+/* Can this browser run the engine at all?
+ *
+ * Checked BEFORE booting, because the failure was silent: an older browser got
+ * a dead page and no explanation. The gate is the two things Pyodide actually
+ * needs that older browsers lack - WebAssembly with BigInt (i64 <-> JS), and
+ * MODULE workers, which Pyodide requires and which Firefox only shipped in
+ * 114 (June 2023). Chrome/Edge 80+, Safari 15+.
+ *
+ * Feature-detected, never sniffed from the user agent: version strings lie,
+ * and a capability test stays correct for browsers that do not exist yet. */
+function browserBlocker() {
+  if (typeof WebAssembly === "undefined") return "This browser has no WebAssembly.";
+  try {
+    new WebAssembly.Global({ value: "i64", mutable: true }, 0n);
+  } catch {
+    return "This browser's WebAssembly is too old (no 64-bit integer support).";
+  }
+  try {
+    const url = URL.createObjectURL(new Blob([""], { type: "text/javascript" }));
+    new Worker(url, { type: "module" }).terminate();
+    URL.revokeObjectURL(url);
+  } catch {
+    return "This browser cannot run module workers, which the Python engine needs. "
+      + "Firefox added them in version 114.";
+  }
+  return null;
+}
+
+if (api.mode === "wasm") {
+  const why = browserBlocker();
+  if (why) {
+    document.querySelector("#unsupported-why").textContent = why;
+    document.querySelector("#unsupported").hidden = false;
+    document.querySelector("#boot").hidden = true;
+    throw new Error("unsupported browser: " + why);  // stop the rest of app.js
+  }
+}
 
 /* Boot: in wasm mode nothing works until Pyodide is up, so show progress and
  * keep the UI disabled meanwhile. In server mode ready() resolves at once. */
@@ -123,7 +161,7 @@ function fitScaleToSheet(summary) {
 }
 
 async function uploadFile(file) {
-  setBusy(true);
+  setBusy(true, "reading the terrain");
   try {
     applyUpload(await api.upload(file));
   } catch (err) {
@@ -156,9 +194,44 @@ function applyUpload(data) {
     `<dt>Relief (Δz)</dt><dd>${relief} m</dd>` +
     `<dt>Extent</dt><dd>${fmt(s.width_world)} × ${fmt(s.height_world)} m</dd>`;
   const notes = $("#dtm-notes");
-  notes.hidden = data.warnings.length === 0;
-  notes.textContent = data.warnings.join(" · ");
+  const warn = [...data.warnings];
+  // Tell the user BEFORE the long wait, not after. At the shipped defaults
+  // (1:500, 2 mm) the contour interval is 1 m, so a 400 m mountain asks for
+  // 400 contours - minutes of work in the browser. Measured: ~300 contours is
+  // roughly 14 s here, and several times that on a modest laptop.
+  const dz = s.zmax - s.zmin;                 // NB: `relief` is already taken above
+  const interval = dz > 0 ? estimatedInterval() : 0;
+  const levels = interval > 0 ? Math.floor(dz / interval) : 0;
+  if (levels > 150) {
+    warn.push(
+      `this terrain has ${Math.round(dz)} m of relief, which at the current ` +
+      `scale means about ${levels} contours - slicing will take a while. ` +
+      `A coarser scale or thicker material gives fewer, chunkier layers.`);
+  }
+  notes.hidden = warn.length === 0;
+  notes.textContent = warn.join(" · ");
   requestSlice(true);
+}
+
+/** Contour interval in metres implied by the current form values, or 0 if it
+ *  cannot be determined. Returns rather than throws: this only drives an
+ *  advisory note, and it is called from applyUpload() - an exception here
+ *  would abort the upload before requestSlice() and leave the app looking
+ *  dead, which is precisely the failure it exists to warn about. */
+function estimatedInterval() {
+  try {
+    const num = (name) => {
+      const el = $(`input[name=${name}]`);
+      return el ? parseFloat(el.value) : NaN;
+    };
+    const th = num("thickness_mm");
+    const sc = num("scale");
+    const ex = num("vertical_exaggeration") || 1;
+    if (!(th > 0) || !(sc > 0) || !(ex > 0)) return 0;
+    return (th * sc) / 1000 / ex;
+  } catch {
+    return 0;
+  }
 }
 
 /* ---------- hatch shapefiles (multiple layers, each with own settings) ---------- */
@@ -370,7 +443,7 @@ function requestSlice(immediate = false) {
 }
 
 async function doSlice() {
-  setBusy(true);
+  setBusy(true, "slicing");
   try {
     state.result = await api.slice(state.uploadId, readParams());
     $("#empty-state").hidden = true;
@@ -912,7 +985,30 @@ function fmt(v) {
  * triggers overlap, and whichever finished first used to switch the
  * indicator off while the other was still working. */
 let busyCount = 0;
-function setBusy(b) {
+/* The busy indicator counts overlapping operations, and now also TICKS: a real
+ * DEM at the default 1:500 can ask for several hundred contours, which is tens
+ * of seconds of honest work in the browser. Previously the only sign of life
+ * was the static word "slicing…", so a slow slice was indistinguishable from a
+ * hung app - which is exactly what a first user reported. */
+let busyTimer = null;
+let busyStart = 0;
+function setBusy(b, label) {
   busyCount = Math.max(0, busyCount + (b ? 1 : -1));
-  $("#busy").hidden = busyCount === 0;
+  const on = busyCount > 0;
+  $("#busy").hidden = !on;
+  if (on && busyTimer === null) {
+    busyStart = Date.now();
+    const base = label || "working";
+    const tick = () => {
+      const s = Math.round((Date.now() - busyStart) / 1000);
+      $("#busy-text").textContent = s < 3 ? base + "…"
+        : s < 20 ? `${base}… ${s}s`
+        : `${base}… ${s}s · large model, still going`;
+    };
+    tick();
+    busyTimer = setInterval(tick, 500);
+  } else if (!on && busyTimer !== null) {
+    clearInterval(busyTimer);
+    busyTimer = null;
+  }
 }

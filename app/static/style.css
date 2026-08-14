@@ -48,6 +48,11 @@ body {
 }
 #sidebar header { display: flex; align-items: center; gap: 10px; }
 #logo { width: 34px; height: 34px; flex: none; }
+/* The anchor wraps the logo tightly so the flex row measures exactly as it did
+   before the link existed. line-height:0 keeps the inline-image descender gap
+   from adding a stray pixel under the roundel. */
+#logo-link { flex: none; display: block; line-height: 0; border-radius: 4px; }
+#logo-link:focus-visible { outline: 2px solid var(--ink, #111); outline-offset: 2px; }
 #sidebar header h1 { font-family: var(--font-head); font-weight: 700; font-size: 1.25rem; letter-spacing: .02em; }
 #sidebar .sub { color: var(--ink-soft); font-size: .8rem; margin-top: 2px; }
 
@@ -212,6 +217,26 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 }
 .tab.active { color: var(--ink); font-weight: 600; background: #fff; }
 #busy, #stack-hint, #sheets-hint { margin-left: 12px; font-size: .78rem; color: var(--ink-soft); }
+/* A moving spinner, not just the word "slicing…": a long slice used to look
+   identical to a frozen app. A real DEM at the default 1:500 can ask for
+   hundreds of contours and take a minute in the browser. */
+#busy { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
+#busy .spin {
+  width: 11px; height: 11px; flex: none; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--ink);
+  animation: dl-spin .8s linear infinite;
+}
+@keyframes dl-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #busy .spin { animation-duration: 2.4s; } }
+
+#unsupported {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 24px;
+}
+#unsupported .boot-box { max-width: 460px; }
+#unsupported p { margin-top: 10px; font-size: .85rem; color: var(--ink-soft); line-height: 1.5; }
+#unsupported a { color: var(--ink); }
 #canvas { flex: 1; width: 100%; min-height: 0; }
 #stack3d { flex: 1; min-height: 0; position: relative; }
 #stack3d canvas { display: block; }

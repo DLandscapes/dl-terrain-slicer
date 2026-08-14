@@ -7,12 +7,34 @@
 <!-- asset paths are RELATIVE on purpose: the browser build is hosted in a
      sub-directory (e.g. /terrain-slicer/v1/), the server build at / -->
 <link rel="icon" type="image/png" href="static/logo-dl.png">
-<link rel="stylesheet" href="static/style.css?v=21">
+<link rel="stylesheet" href="static/style.css?v=25">
 </head>
 <body>
+<!-- Shown INSTEAD of the app when the browser cannot run the engine. Filled in
+     and revealed by app.js before anything else runs: a visitor on an old
+     browser used to get a dead page with no explanation. -->
+<div id="unsupported" hidden>
+  <div class="boot-box">
+    <b>This browser is too old to run the slicer</b>
+    <p id="unsupported-why"></p>
+    <p>Update your browser &mdash; Chrome or Edge&nbsp;80+, Firefox&nbsp;114+,
+      Safari&nbsp;15+ &mdash; or download the desktop version, which has no
+      browser requirements at all.</p>
+    <p><a href="https://github.com/DLandscapes/dl-terrain-slicer/releases/latest"
+      target="_blank" rel="noopener">Download the desktop version &rarr;</a></p>
+  </div>
+</div>
+
 <aside id="sidebar">
   <header>
-    <img id="logo" src="static/logo-dl.png" alt="Digital Landscapes">
+    <!-- The header logo is the first thing a visitor clicks to get "back".
+         Opens in a new tab like the brandmark does, deliberately: the app holds
+         a loaded terrain and its parameters in memory, and a same-tab navigation
+         would throw that away. -->
+    <a id="logo-link" href="https://digital-landscapes.com/" target="_blank"
+       rel="noopener" title="Digital Landscapes — opens in a new tab">
+      <img id="logo" src="static/logo-dl.png" alt="Digital Landscapes">
+    </a>
     <div>
       <h1>Terrain&nbsp;Slicer</h1>
       <p class="sub">Terrain &rarr; laser-cut contour model</p>
@@ -144,7 +166,7 @@
   <nav id="tabs">
     <button class="tab active" data-tab="sheets">Sheets</button>
     <button class="tab" data-tab="stack">Stack&nbsp;3D</button>
-    <span id="busy" hidden>slicing&hellip;</span>
+    <span id="busy" hidden><i class="spin"></i><span id="busy-text">slicing&hellip;</span></span>
     <span id="stack-hint" hidden>click&nbsp;=&nbsp;select ring &middot; drag&nbsp;=&nbsp;orbit &middot; wheel&nbsp;=&nbsp;zoom &middot; right-drag&nbsp;=&nbsp;pan</span>
     <span id="sheets-hint" hidden>wheel&nbsp;=&nbsp;zoom &middot; drag&nbsp;=&nbsp;pan &middot; double-click&nbsp;=&nbsp;reset</span>
   </nav>
@@ -194,16 +216,20 @@
     <b>Starting the terrain engine</b>
     <p id="boot-step">loading&hellip;</p>
     <div class="boot-bar"><i id="boot-fill"></i></div>
-    <small>Everything runs inside your browser &mdash; your terrain files are
-      never uploaded anywhere. The first start downloads about 30&nbsp;MB and
-      is cached afterwards.</small>
+    <small><b>The first start takes 20&ndash;60 seconds</b> &mdash; on an older
+      computer up to a couple of minutes. That is normal: the whole Python
+      engine is being downloaded (about 20&nbsp;MB) and compiled inside your
+      browser. It is cached afterwards, so the next visit starts in a few
+      seconds.<br>
+      Everything runs on your own machine &mdash; your terrain files are never
+      uploaded anywhere.</small>
   </div>
 </div>
 
 <script src="static/vendor/three.min.js"></script>
 <script src="static/vendor/OrbitControls.js"></script>
 <!-- TS_MODE is injected here by web/build.py for the browser build -->
-<script src="static/api.js?v=24"></script>
-<script src="static/app.js?v=24"></script>
+<script src="static/api.js?v=25"></script>
+<script src="static/app.js?v=25"></script>
 </body>
 </html>
