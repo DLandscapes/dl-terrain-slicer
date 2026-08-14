@@ -67,16 +67,39 @@ class SliceResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _filled_region(gen, lower: float, upper: float) -> MultiPolygon:
-    """Region where lower <= elevation < upper, as a MultiPolygon (grid coords)."""
+def _filled_region(gen, lower: float, upper: float,
+                   dropped: list | None = None) -> MultiPolygon:
+    """Region where lower <= elevation < upper, as a MultiPolygon (grid coords).
+
+    Rings carrying a non-finite coordinate are DISCARDED rather than handed to
+    GEOS. On rugged terrain contourpy can emit a NaN/Inf vertex in a degenerate
+    ring, and GEOS answers with
+
+        IllegalArgumentException: CGAlgorithmsDD::orientationIndex
+        encountered NaN/Inf numbers
+
+    which aborts the whole slice with a message that means nothing to a user.
+    It showed up in the WebAssembly build (numpy 2.4.3) on terrain the desktop
+    build (numpy 2.5.1) handled - the same arithmetic either side of a
+    tolerance. A ring with a NaN vertex has no usable geometry anyway, so
+    dropping it loses nothing real; the count is reported so the user is told
+    rather than silently given a slightly different model.
+    """
     points_list, offsets_list = gen.filled(lower, upper)
     polys = []
     for pts, offs in zip(points_list, offsets_list):
         rings = [pts[offs[j]:offs[j + 1]] for j in range(len(offs) - 1)]
         rings = [r for r in rings if len(r) >= 4]
-        if not rings:
+        good = []
+        for r in rings:
+            if np.isfinite(r).all():
+                good.append(r)
+            elif dropped is not None:
+                dropped.append(1)
+        # a lost OUTER ring takes its holes with it - the polygon is gone
+        if not good or len(good) != len(rings) and not np.isfinite(rings[0]).all():
             continue
-        poly = Polygon(rings[0], rings[1:])
+        poly = Polygon(good[0], good[1:])
         if not poly.is_valid:
             poly = shapely.make_valid(poly)
         polys.append(poly)
@@ -181,8 +204,14 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
 
     top = zmax + 10.0 * interval
     eps = 1e-9 * max(1.0, abs(zmax))
-    regions = [_filled_region(gen, lv - eps if i else zmin - 1.0, top)
+    dropped: list = []
+    regions = [_filled_region(gen, lv - eps if i else zmin - 1.0, top, dropped)
                for i, lv in enumerate(levels)]
+    if dropped:
+        warnings.append(
+            f"{len(dropped)} degenerate contour ring(s) skipped - the terrain "
+            f"has spots too rough for the contour interval; the model is "
+            f"otherwise complete")
 
     # world -> model mm, then simplify
     f = params.world_to_model

@@ -28,7 +28,7 @@ from app.png import hillshade_png
 # tags in app/static/index.html. The frontend compares this at startup and
 # tells the user to restart the server if the running process is older than
 # the files on disk.
-APP_BUILD = 25
+APP_BUILD = 26
 
 MAX_UPLOADS = 8
 
@@ -155,7 +155,22 @@ def run(store: Store, upload_id: str, params_dict: dict):
                 settings_by_id.get(stored["id"], {})
                 | {"name": stored["name"], "kind": stored.get("kind", "polygon")})
                for stored in store.hatches.get(upload_id, [])]
-    result = slice_dtm(dtm, params, hatches=hatches)
+    try:
+        result = slice_dtm(dtm, params, hatches=hatches)
+    except Exception as exc:
+        # GEOS speaks in C++ exception names. Whatever slips past the
+        # finite-ring guard in contours._filled_region, the user gets a
+        # sentence they can act on instead of "CGAlgorithmsDD::orientationIndex
+        # encountered NaN/Inf numbers".
+        name = type(exc).__name__
+        if "GEOS" in name or "GEOS" in str(exc) or "shapely" in type(exc).__module__:
+            raise SlicerError(
+                422,
+                "the geometry engine could not build this model - the terrain "
+                "is probably very rough for the chosen contour interval. Try a "
+                "coarser scale or thicker material, or clip the terrain to a "
+                "smaller area.") from exc
+        raise
     nested = nest(result.pieces, params.sheet_width_mm, params.sheet_height_mm,
                   params.sheet_margin_mm, params.part_spacing_mm)
     return dtm, params, result, nested

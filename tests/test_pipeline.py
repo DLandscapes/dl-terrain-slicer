@@ -437,6 +437,59 @@ def test_rasterize_matches_per_triangle_reference():
     assert np.array_equal(got, want, equal_nan=True)
 
 
+def test_filled_region_drops_non_finite_rings():
+    """A ring carrying a NaN/Inf vertex must never reach GEOS.
+
+    contourpy can emit a degenerate ring with a non-finite vertex on rough
+    terrain; GEOS then raises
+    `CGAlgorithmsDD::orientationIndex encountered NaN/Inf numbers` and the
+    whole slice dies with a message that means nothing to a user. Observed in
+    the WebAssembly build (numpy 2.4.3) on terrain the desktop build handled.
+    A stub generator stands in for contourpy so the case is deterministic."""
+    import numpy as np
+
+    from slicer.contours import _filled_region
+
+    square = np.array([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]])
+    poisoned = np.array([[20.0, 20.0], [30.0, np.nan], [30.0, 30.0],
+                         [20.0, 30.0], [20.0, 20.0]])
+
+    class StubGen:
+        """Mimics contourpy's OuterOffset filled() output."""
+        def __init__(self, rings):
+            self._rings = rings
+
+        def filled(self, lower, upper):
+            pts = [np.concatenate(r) for r in self._rings]
+            offs = []
+            for r in self._rings:
+                o, acc = [0], 0
+                for part in r:
+                    acc += len(part)
+                    o.append(acc)
+                offs.append(np.array(o))
+            return pts, offs
+
+    # the poisoned ring is dropped, the good one survives
+    dropped = []
+    out = _filled_region(StubGen([[square], [poisoned]]), 0.0, 1.0, dropped)
+    assert len(dropped) == 1
+    assert not out.is_empty
+    assert abs(out.area - 100.0) < 1e-6      # only the clean 10x10 square
+
+    # and the whole thing is finite - nothing NaN leaked into the result
+    for geom in out.geoms:
+        assert np.isfinite(np.asarray(geom.exterior.coords)).all()
+
+    # a poisoned OUTER ring takes its (valid) holes with it rather than
+    # producing a polygon with the wrong shape
+    dropped2 = []
+    hole = np.array([[22.0, 22.0], [24.0, 22.0], [24.0, 24.0], [22.0, 24.0], [22.0, 22.0]])
+    out2 = _filled_region(StubGen([[poisoned, hole]]), 0.0, 1.0, dropped2)
+    assert out2.is_empty
+    assert dropped2
+
+
 def test_lzw_geotiff_without_imagecodecs():
     """QGIS and GDAL write LZW-compressed GeoTIFFs by default, float DEMs
     usually with the floating-point predictor (tag 317 = 3). Pyodide has no

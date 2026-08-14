@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 25;
+const EXPECTED_BUILD = 26;
 
 /* Can this browser run the engine at all?
  *
