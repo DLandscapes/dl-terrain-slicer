@@ -96,11 +96,40 @@ def _nodata_value(tif: tifffile.TiffFile) -> float | None:
     return None
 
 
+def _read_page(page):
+    """Decode a TIFF page, single-threaded if the platform has no threads.
+
+    Pyodide has no working pthreads, so `threading.Thread.start()` raises
+    `RuntimeError: can't start new thread`. tifffile decodes segments through a
+    ThreadPoolExecutor whenever `TiffPage.maxworkers` comes back >= 2, and it
+    normally clamps that to `TIFF.MAXWORKERS` - which is 1 in the browser, so
+    compressed rasters are safe by accident. The UNCOMPRESSED multi-tile branch
+    ends in a hardcoded `return 2` that ignores MAXWORKERS altogether, so an
+    uncompressed tiled GeoTIFF - exactly what a plain GDAL/QGIS export gives
+    you - killed the upload with a message about threads, which tells a
+    landscape architect nothing at all.
+
+    Reported from the browser build on a 1400x1400 uncompressed DTM; the
+    deflate-compressed version of the same raster loaded fine, which is what
+    made it look arbitrary.
+
+    The default is tried first so desktop keeps its parallel decode, and only a
+    thread failure falls back. Decoding is not the bottleneck anyway - contour
+    complexity is - so the single-threaded path costs little.
+    """
+    try:
+        return page.asarray()
+    except RuntimeError as exc:
+        if "thread" not in str(exc).lower():
+            raise
+        return page.asarray(maxworkers=1)
+
+
 def load_geotiff(path_or_bytes, name: str = "", max_dim: int = 2000) -> tuple[DTM, list[str]]:
     """Load a GeoTIFF DTM. Returns (dtm, warnings)."""
     warnings: list[str] = []
     with tifffile.TiffFile(path_or_bytes) as tif:
-        arr = tif.pages[0].asarray()
+        arr = _read_page(tif.pages[0])
         if arr.ndim == 3:  # multi-band: take the first band
             warnings.append(f"raster has {arr.shape[0] if arr.shape[0] < arr.shape[-1] else arr.shape[-1]} bands; using band 1")
             arr = arr[0] if arr.shape[0] <= 4 else arr[..., 0]

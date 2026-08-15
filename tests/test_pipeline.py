@@ -754,3 +754,46 @@ def test_simplify_safe_still_simplifies_normally():
     assert not stubborn                      # nothing stubborn about it
     assert len(out.exterior.coords) < len(pts)   # it really did simplify
     assert out.is_valid
+
+
+def test_geotiff_read_falls_back_when_threads_are_unavailable():
+    """A platform without threads must still read the raster.
+
+    Pyodide has no working pthreads, so `Thread.start()` raises
+    `RuntimeError: can't start new thread`. tifffile decodes segments in a
+    ThreadPoolExecutor whenever `TiffPage.maxworkers` >= 2. It clamps that to
+    `TIFF.MAXWORKERS` (1 in the browser) for every COMPRESSED path, but the
+    uncompressed multi-tile branch ends in a hardcoded `return 2` - so an
+    uncompressed tiled GeoTIFF, the plain GDAL/QGIS export, aborted the upload
+    with "could not read terrain file: can't start new thread".
+    """
+    from slicer.dtm import _read_page
+
+    class Page:
+        def __init__(self):
+            self.calls = []
+
+        def asarray(self, maxworkers=None):
+            self.calls.append(maxworkers)
+            if maxworkers is None:
+                raise RuntimeError("can't start new thread")
+            return "decoded"
+
+    p = Page()
+    assert _read_page(p) == "decoded"
+    # tried the fast path first, then retried single-threaded
+    assert p.calls == [None, 1]
+
+
+def test_geotiff_read_does_not_swallow_other_errors():
+    """Only the thread failure is retried - anything else must propagate."""
+    import pytest
+
+    from slicer.dtm import _read_page
+
+    class Page:
+        def asarray(self, maxworkers=None):
+            raise RuntimeError("file is truncated")
+
+    with pytest.raises(RuntimeError, match="truncated"):
+        _read_page(Page())
