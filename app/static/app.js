@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 26;
+const EXPECTED_BUILD = 27;
 
 /* Can this browser run the engine at all?
  *
@@ -452,6 +452,17 @@ async function doSlice() {
     stackDirty = true;
     draw();
   } catch (err) {
+    // Clear the previous run's numbers. They belonged to the last slice that
+    // WORKED, and leaving them under an error message reads as if the failed
+    // settings had produced them - the stats said "13 contours - 4 boards -
+    // 4 sheets" while the model had in fact not been built at all.
+    state.result = null;
+    $("#stats").hidden = true;
+    $("#export").disabled = true;
+    stackDirty = true;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    draw();  // hides the stack tools and gizmo; guards on a null result
     $("#warnings").hidden = false;
     $("#warnings").textContent = err.message;
   } finally {
@@ -582,7 +593,35 @@ function drawSheets() {
   ctx.scale(sheetView.z, sheetView.z);
   const z = sheetView.z;
   const { sheet, placements, stats } = state.result;
-  const n = Math.max(1, stats.n_sheets);
+
+  // Nothing nested: say so HERE, in the viewport the user is looking at. This
+  // used to fall through to Math.max(1, n_sheets) and draw one phantom empty
+  // sheet labelled "sheet 1 - board" with nothing on it, while the real reason
+  // ("board larger than the usable sheet ...") went to #warnings in the sidebar,
+  // below the parameters and off-screen. A user reported that as the app doing
+  // nothing at all - the slice had in fact finished in under a second.
+  if (!stats.n_sheets) {
+    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+    const usableW = sheet.w - 2 * sheet.margin, usableH = sheet.h - 2 * sheet.margin;
+    const lines = [
+      "Nothing fits on a sheet yet.",
+      `The model is ${Math.round(stats.model_width)} × ${Math.round(stats.model_height)} mm;`
+        + ` a sheet holds ${Math.round(usableW)} × ${Math.round(usableH)} mm inside the margin.`,
+      "Use a larger scale number, or a bigger material sheet.",
+    ];
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#111";
+    ctx.font = '600 15px "Source Sans 3", system-ui';
+    ctx.fillText(lines[0], w / 2, h / 2 - 14);
+    ctx.fillStyle = "#6d6f72";
+    ctx.font = '13px "Quattrocento Sans", system-ui';
+    ctx.fillText(lines[1], w / 2, h / 2 + 8);
+    ctx.fillText(lines[2], w / 2, h / 2 + 28);
+    ctx.textAlign = "start";
+    return;
+  }
+
+  const n = stats.n_sheets;
   const pad = 20;
   let cols = Math.ceil(Math.sqrt((n * sheet.h * (w - pad)) / (sheet.w * (h - pad))));
   cols = Math.min(n, Math.max(1, cols));
@@ -789,6 +828,19 @@ function ensureThree() {
       const d = camera.position.distanceTo(controls.target);
       scene.fog.near = d * 1.0;
       scene.fog.far = d * 3.0;
+      // Track the clip planes to the orbit distance instead of fixing them once
+      // from the model size. The old dim/500 .. dim*40 pair spanned 20000:1, and
+      // a depth buffer stretched that far cannot separate the ground grid from
+      // the base plate sitting on top of it. Following d keeps the ratio at
+      // 2000:1 at every zoom, so near is always 1% of the viewing distance -
+      // close enough never to clip what you zoomed in to look at, far enough
+      // that the grid stays behind the model. fog.far (3d) hides the grid long
+      // before far (20d) could clip it.
+      const near = d / 100, far = d * 20;
+      if (camera.near !== near || camera.far !== far) {
+        camera.near = near; camera.far = far;
+        camera.updateProjectionMatrix();
+      }
       let cam = camera;
       if (axis.orthographic) {
         const o = orthoCamera;
@@ -870,9 +922,21 @@ function buildStack3D() {
   const span = Math.max(W, H);
   const cell = span * 1.7 > 1500 ? 100 : 50;
   const size = span * 14;
-  const grid = new THREE.GridHelper(size, Math.max(2, Math.round(size / cell)), 0xcccccc, 0xe6e6e6);
+  // Both colours are the SAME on purpose. GridHelper's first colour argument is
+  // the CENTRE-LINE colour, and a darker one draws a cross through the middle of
+  // the grid - which, because the grid is centred on the model, runs underneath
+  // the model and out the far side. Combined with the fog range below (which
+  // leaves anything nearer than the camera target unfaded) that read as a solid
+  // dark bar lying on the ground in front of the model. Reported as a slicing
+  // artefact; it never was one.
+  const grid = new THREE.GridHelper(size, Math.max(2, Math.round(size / cell)), 0xe6e6e6, 0xe6e6e6);
   grid.rotation.x = Math.PI / 2;
-  grid.position.set(W / 2, H / 2, -0.1);
+  // Sit the grid a fraction of the MODEL below z=0, not a fixed 0.1 mm. The base
+  // plate's underside is at z=0, and 0.1 mm is far too tight for the depth buffer
+  // to resolve - the grid punched up through the model, worst on nearly flat
+  // terrain (a difference raster is ~90% flat, so almost the whole model sits
+  // exactly where the grid is). Proportional keeps it invisibly close at any size.
+  grid.position.set(W / 2, H / 2, -Math.max(0.5, span / 200));
   t.group.add(grid);
 
   const topZ = Math.max(1, n * th);
@@ -885,8 +949,11 @@ function buildStack3D() {
   const dim = Math.max(W, H, topZ);
   t.controls.target.set(W / 2, H / 2, topZ / 2);
   t.camera.position.set(W / 2 - dim * 0.55, H / 2 - dim * 1.05, topZ / 2 + dim * 0.75);
-  t.camera.near = dim / 500;
-  t.camera.far = dim * 40;
+  // Seed values only - the render loop retunes these to the orbit distance every
+  // frame (see the clip-plane note there). Kept so the very first frame, drawn
+  // before the loop has run once, is already sane.
+  t.camera.near = dim / 100;
+  t.camera.far = dim * 20;
   t.camera.updateProjectionMatrix();
   t.controls.update();
   stackDirty = false;

@@ -113,6 +113,49 @@ def _filled_region(gen, lower: float, upper: float,
     return merged
 
 
+def _simplify_safe(geom, tol: float, stubborn: list | None = None):
+    """Simplify, but never let simplification kill the slice.
+
+    GEOS can raise
+
+        IllegalArgumentException: CGAlgorithmsDD::orientationIndex
+        encountered NaN/Inf numbers
+
+    from inside TopologyPreservingSimplifier on geometry that is perfectly
+    VALID and whose coordinates are all finite - the NaN is produced by the
+    double-double robust predicates themselves, not present in the input. It
+    is a WebAssembly-only failure (the wheel's GEOS is built for a floating
+    point environment the DD arithmetic behaves differently in), and it needs
+    a level with an enormous vertex count to show up: the real report was a
+    DEM-of-difference where ~90% of cells sit at zero, so the contour nearest
+    zero traced every speckle of noise - 27,357 vertices on one level of
+    fourteen, and that one level aborted the entire model.
+
+    Simplification is an optimisation - it shortens the laser path - never a
+    correctness requirement. So: try topology-preserving, fall back to plain
+    Douglas-Peucker (a different code path), and if GEOS refuses both, keep the
+    geometry unsimplified. A longer cut on one level beats no model at all.
+    The caller reports the count so the user is told rather than left guessing.
+    """
+    if geom.is_empty:
+        return geom
+    try:
+        return shapely.simplify(geom, tol, preserve_topology=True)
+    except Exception:
+        pass
+    try:
+        out = shapely.simplify(geom, tol, preserve_topology=False)
+        # DP can fold a ring onto itself; only take it if it survived intact.
+        # This path DID simplify, so it is not counted as stubborn.
+        if not out.is_empty and out.is_valid:
+            return out
+    except Exception:
+        pass
+    if stubborn is not None:
+        stubborn.append(1)
+    return geom
+
+
 def _coords(line) -> list[tuple]:
     return [(round(x, 3), round(y, 3)) for x, y in line.coords]
 
@@ -218,7 +261,14 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
     scaled = [shapely.transform(r, lambda a: a * f) if not r.is_empty else r for r in regions]
     tol = params.simplify_mm
     if tol > 0:
-        scaled = [shapely.simplify(r, tol, preserve_topology=True) for r in scaled]
+        stubborn: list = []
+        scaled = [_simplify_safe(r, tol, stubborn) for r in scaled]
+        if stubborn:
+            warnings.append(
+                f"{len(stubborn)} contour level(s) could not be simplified and "
+                f"are cut at full detail - the laser path is longer there. This "
+                f"happens on levels that trace a very large flat area (a "
+                f"difference raster, or water). The model itself is complete.")
     scaled = [MultiPolygon([r]) if isinstance(r, Polygon) else r for r in scaled]
 
     footprint = scaled[0]

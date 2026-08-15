@@ -693,3 +693,64 @@ def test_report_mentions_interval(hills):
     report = zipfile.ZipFile(io.BytesIO(blob)).read("cutting_report.txt").decode()
     assert "real-world contour interval: 2" in report
     assert "DLF-05_cut_outer" in report
+
+
+def test_simplify_failure_does_not_kill_the_slice():
+    """GEOS refusing to simplify must cost the simplification, not the model.
+
+    The real failure: a DEM-of-difference where ~90% of cells sit at zero, so
+    the contour level nearest zero traced every speckle of noise - 27,357
+    vertices on ONE level of fourteen. `shapely.simplify(preserve_topology=True)`
+    raised `CGAlgorithmsDD::orientationIndex encountered NaN/Inf numbers` from
+    inside its double-double predicates even though the geometry was VALID and
+    every coordinate finite, and that one level aborted the whole slice. WASM
+    only; the desktop GEOS simplifies the identical geometry without complaint.
+
+    Simplification only shortens the laser path, so the guard degrades instead
+    of failing. Both GEOS entry points are stubbed to raise so the test is
+    deterministic and does not depend on which build of GEOS is installed.
+    """
+    import shapely
+    from shapely.geometry import Polygon
+
+    from slicer import contours as C
+
+    geom = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    calls = []
+
+    def boom(g, tol, preserve_topology=True):
+        calls.append(preserve_topology)
+        raise shapely.errors.GEOSException(
+            "IllegalArgumentException: CGAlgorithmsDD::orientationIndex "
+            "encountered NaN/Inf numbers")
+
+    real = shapely.simplify
+    shapely.simplify = boom
+    try:
+        stubborn = []
+        out = C._simplify_safe(geom, 0.2, stubborn)
+    finally:
+        shapely.simplify = real
+
+    # it tried topology-preserving first, then plain Douglas-Peucker
+    assert calls == [True, False]
+    # and having been refused twice it kept the geometry rather than dying
+    assert out.equals(geom)
+    assert len(stubborn) == 1
+
+
+def test_simplify_safe_still_simplifies_normally():
+    """The guard must not disable simplification on healthy geometry."""
+    from shapely.geometry import Polygon
+
+    from slicer import contours as C
+
+    # a square with many near-collinear points along one edge
+    pts = [(x / 10.0, 0.0) for x in range(101)] + [(10.0, 10.0), (0.0, 10.0)]
+    geom = Polygon(pts)
+    stubborn = []
+    out = C._simplify_safe(geom, 0.5, stubborn)
+
+    assert not stubborn                      # nothing stubborn about it
+    assert len(out.exterior.coords) < len(pts)   # it really did simplify
+    assert out.is_valid
