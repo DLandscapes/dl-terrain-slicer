@@ -797,3 +797,60 @@ def test_geotiff_read_does_not_swallow_other_errors():
 
     with pytest.raises(RuntimeError, match="truncated"):
         _read_page(Page())
+
+
+def test_selftest_exits_without_unwinding_the_interpreter():
+    """A passed self-test must not be undone by a teardown crash.
+
+    CI recorded `Segmentation fault: 11` (exit 139) from the frozen macOS
+    arm64 build AFTER `SELFTEST OK` had printed: the app started and served
+    correctly, then died unloading GEOS/numpy inside the PyInstaller bundle.
+    The release job still ran and published v1.0.3 with only TWO of the three
+    platform assets - the Apple Silicon download was simply missing, and
+    nothing failed loudly enough to notice.
+
+    The self-test's contract is "the packaged app starts and serves". Once it
+    has answered that, it leaves via os._exit so the exit status is the verdict
+    it computed, not whatever the runtime does on the way out. This test guards
+    that: if the os._exit is ever turned back into a plain `return 0`, the
+    flake comes back and it costs a release asset again.
+    """
+    import urllib.request
+
+    import launcher
+    from app.core import APP_BUILD
+
+    class Resp:
+        def read(self):
+            return b'<div id="dropzone"></div>'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    calls = {}
+
+    def fake_exit(code):
+        calls["code"] = code
+        raise SystemExit(code)  # stand in for the real _exit so pytest survives
+
+    orig = (launcher.serve, launcher.wait_until_up,
+            urllib.request.urlopen, launcher.os._exit)
+    launcher.serve = lambda port: None
+    launcher.wait_until_up = lambda url: {"build": APP_BUILD}
+    urllib.request.urlopen = lambda *a, **kw: Resp()
+    launcher.os._exit = fake_exit
+    try:
+        raised = False
+        try:
+            launcher.selftest(8799)
+        except SystemExit:
+            raised = True
+    finally:
+        (launcher.serve, launcher.wait_until_up,
+         urllib.request.urlopen, launcher.os._exit) = orig
+
+    assert raised, "selftest returned normally instead of leaving via os._exit"
+    assert calls.get("code") == 0

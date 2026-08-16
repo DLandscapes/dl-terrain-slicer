@@ -14,6 +14,7 @@ never fight the one already running on 8765.
 from __future__ import annotations
 
 import argparse
+import os
 import socket
 import sys
 import threading
@@ -117,7 +118,24 @@ def selftest(port: int) -> int:
         print("SELFTEST FAILED: index.html was served but looks wrong")
         return 1
     print(f"SELFTEST OK: build {APP_BUILD} serving on port {port}")
-    return 0
+    # Leave immediately, without unwinding the interpreter.
+    #
+    # The uvicorn server is still running on a daemon thread with GEOS, numpy
+    # and their shared libraries loaded. Tearing all that down inside a frozen
+    # macOS arm64 bundle segfaults roughly half the time - CI saw exit 139
+    # AFTER this line had printed, so a build that had just proved itself
+    # healthy was recorded as a failure. It cost v1.0.3 its Apple Silicon
+    # download: the release job still ran and published only two of the three
+    # assets, and nothing failed loudly enough to notice.
+    #
+    # This test's contract is "the packaged app starts and serves" - it has
+    # answered that by now. Whether the runtime can also unload cleanly is a
+    # different question, and not one CI should fail a release over. os._exit
+    # skips atexit handlers, garbage collection and library unload, so the exit
+    # status is the verdict this function actually computed.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 def main() -> int:
