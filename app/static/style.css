@@ -54,6 +54,11 @@ body {
 #logo-link { flex: none; display: block; line-height: 0; border-radius: 4px; }
 #logo-link:focus-visible { outline: 2px solid var(--ink, #111); outline-offset: 2px; }
 #sidebar header h1 { font-family: var(--font-head); font-weight: 700; font-size: 1.25rem; letter-spacing: .02em; }
+/* The title is a link but must not LOOK like one until you reach for it -
+   it is the app's heading first. Inherit everything, reveal on hover/focus. */
+#title-link { color: inherit; text-decoration: none; border-radius: 3px; }
+#title-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+#title-link:focus-visible { outline: 2px solid var(--ink, #111); outline-offset: 2px; }
 #sidebar .sub { color: var(--ink-soft); font-size: .8rem; margin-top: 2px; }
 
 /* upload area: dashed only while empty, card once loaded */
