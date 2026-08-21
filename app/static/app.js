@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 29;
+const EXPECTED_BUILD = 30;
 
 /* Can this browser run the engine at all?
  *
@@ -1059,23 +1059,104 @@ let busyCount = 0;
  * hung app - which is exactly what a first user reported. */
 let busyTimer = null;
 let busyStart = 0;
+let busyBase = "working";
+/* Latest progress report from the engine, and the smoothed estimate built from
+ * it. Null until the first report arrives - or forever, on a transport that
+ * cannot deliver messages mid-call. */
+let busyDone = 0, busyTotal = 0, busyHasProgress = false, busyEta = null;
+
+const RING_C = 100.53;   // 2 * PI * r, r=16 in the SVG
+
+function setRing(fraction) {
+  const ring = $("#busy-ring");
+  if (!ring) return;
+  if (fraction === null) {
+    ring.classList.add("indeterminate");
+    return;
+  }
+  ring.classList.remove("indeterminate");
+  const f = Math.max(0, Math.min(1, fraction));
+  ring.querySelector(".arc").style.strokeDashoffset = String(RING_C * (1 - f));
+  ring.querySelector(".hand").style.transform = `rotate(${f * 360}deg)`;
+}
+
+/* Phrase the wait as TIME LEFT rather than time served.
+ *
+ * The estimate is measured, never guessed from the file: elapsed time against
+ * the fraction of work actually reported done. Guessing up front would be
+ * dishonest here - this tool's cost follows contour complexity, not file size,
+ * and that goes badly non-monotonic (2 M cells 665 s vs 4.5 M cells 226 s).
+ *
+ * Rounded coarsely on purpose, and never to zero: a counter ticking 3, 2, 1 and
+ * then sitting at "1 second left" is worse than no number at all. Past the
+ * estimate it stops predicting and just says it is still going. */
+function etaPhrase(sec, f) {
+  if (sec === null) return null;
+  // "almost done" needs BOTH a small estimate and real progress behind it.
+  // Judging on the seconds alone said "almost done" at 36% and then sat there
+  // for eight seconds - the estimate was right, the words were not.
+  if (f > 0.92 || sec <= 5) return "almost done";
+  if (sec < 20) return `about ${Math.max(5, Math.round(sec / 5) * 5)} seconds left`;
+  if (sec <= 90) return `about ${Math.round(sec / 10) * 10} seconds left`;
+  const min = Math.round(sec / 30) / 2;          // half-minute steps
+  return `about ${min % 1 ? min.toFixed(1) : min} minutes left`;
+}
+
+function busyTick() {
+  const elapsed = (Date.now() - busyStart) / 1000;
+  const f = busyTotal > 0 ? busyDone / busyTotal : 0;
+  setRing(busyHasProgress ? f : null);
+
+  // Wait for enough signal before promising anything: an estimate from the
+  // first half-second of a 200-contour slice is noise.
+  if (busyHasProgress && f > 0.04 && elapsed > 1.5) {
+    const raw = elapsed * (1 - f) / f;
+    // Smooth so the number does not jitter. It may always fall; it only rises
+    // if the run has genuinely slowed a lot, which is information worth showing.
+    busyEta = busyEta === null ? raw
+      : raw < busyEta ? Math.min(busyEta, raw)
+      : raw > busyEta * 1.35 ? raw
+      : busyEta;
+    if (f >= 1) {
+      // The contour work is done; nesting, the payload and the redraw still
+      // have to happen. Sitting on "almost done · 100%" for those seconds read
+      // as a stall, so this state says what is actually going on.
+      $("#busy-text").textContent = "finishing…";
+      return;
+    }
+    const pct = Math.round(f * 100);
+    $("#busy-text").textContent = `${busyBase}… ${etaPhrase(busyEta, f)} · ${pct}%`;
+    return;
+  }
+  const s = Math.round(elapsed);
+  $("#busy-text").textContent = s < 3 ? busyBase + "…"
+    : s < 20 ? `${busyBase}… ${s}s`
+    : `${busyBase}… ${s}s · large model, still going`;
+}
+
 function setBusy(b, label) {
   busyCount = Math.max(0, busyCount + (b ? 1 : -1));
   const on = busyCount > 0;
   $("#busy").hidden = !on;
   if (on && busyTimer === null) {
     busyStart = Date.now();
-    const base = label || "working";
-    const tick = () => {
-      const s = Math.round((Date.now() - busyStart) / 1000);
-      $("#busy-text").textContent = s < 3 ? base + "…"
-        : s < 20 ? `${base}… ${s}s`
-        : `${base}… ${s}s · large model, still going`;
-    };
-    tick();
-    busyTimer = setInterval(tick, 500);
+    busyBase = label || "working";
+    busyDone = 0; busyTotal = 0; busyHasProgress = false; busyEta = null;
+    setRing(null);
+    busyTick();
+    busyTimer = setInterval(busyTick, 250);
   } else if (!on && busyTimer !== null) {
     clearInterval(busyTimer);
     busyTimer = null;
+    setRing(null);
   }
 }
+
+/* The engine reports (done, total) from inside the slicing loop. On the desktop
+ * transport this never fires and the indicator stays on the counting-up
+ * fallback - a capability, not a transport check, so app.js still does not know
+ * which backend it got. */
+api.onSliceProgress = (done, total) => {
+  if (!(total > 0)) return;
+  busyDone = done; busyTotal = total; busyHasProgress = true;
+};

@@ -7,7 +7,7 @@
 <!-- asset paths are RELATIVE on purpose: the browser build is hosted in a
      sub-directory (e.g. /terrain-slicer/v1/), the server build at / -->
 <link rel="icon" type="image/png" href="static/logo-dl.png">
-<link rel="stylesheet" href="static/style.css?v=29">
+<link rel="stylesheet" href="static/style.css?v=30">
 </head>
 <body>
 <!-- Shown INSTEAD of the app when the browser cannot run the engine. Filled in
@@ -171,7 +171,7 @@
   <nav id="tabs">
     <button class="tab active" data-tab="sheets">Sheets</button>
     <button class="tab" data-tab="stack">Stack&nbsp;3D</button>
-    <span id="busy" hidden><i class="spin"></i><span id="busy-text">slicing&hellip;</span></span>
+    <span id="busy" hidden><svg id="busy-ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="track" cx="20" cy="20" r="16"/><circle class="arc" cx="20" cy="20" r="16"/><line class="hand" x1="20" y1="20" x2="20" y2="7"/></svg><span id="busy-text" role="status" aria-live="polite">slicing&hellip;</span></span>
     <span id="stack-hint" hidden>click&nbsp;=&nbsp;select ring &middot; drag&nbsp;=&nbsp;orbit &middot; wheel&nbsp;=&nbsp;zoom &middot; right-drag&nbsp;=&nbsp;pan</span>
     <span id="sheets-hint" hidden>wheel&nbsp;=&nbsp;zoom &middot; drag&nbsp;=&nbsp;pan &middot; double-click&nbsp;=&nbsp;reset</span>
   </nav>
@@ -234,7 +234,7 @@
 <script src="static/vendor/three.min.js"></script>
 <script src="static/vendor/OrbitControls.js"></script>
 <!-- TS_MODE is injected here by web/build.py for the browser build -->
-<script src="static/api.js?v=29"></script>
-<script src="static/app.js?v=29"></script>
+<script src="static/api.js?v=30"></script>
+<script src="static/app.js?v=30"></script>
 </body>
 </html>

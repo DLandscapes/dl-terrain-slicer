@@ -222,17 +222,41 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 }
 .tab.active { color: var(--ink); font-weight: 600; background: #fff; }
 #busy, #stack-hint, #sheets-hint { margin-left: 12px; font-size: .78rem; color: var(--ink-soft); }
-/* A moving spinner, not just the word "slicing…": a long slice used to look
-   identical to a frozen app. A real DEM at the default 1:500 can ask for
-   hundreds of contours and take a minute in the browser. */
-#busy { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
-#busy .spin {
-  width: 11px; height: 11px; flex: none; border-radius: 50%;
-  border: 2px solid var(--line); border-top-color: var(--ink);
-  animation: dl-spin .8s linear infinite;
+#busy { font-size: .82rem; font-weight: 600; }
+/* A CLOCK, not just the word "slicing…". Two problems with the earlier
+   spinner: it counted UP, which tells you how long you have already waited but
+   not how long is left, and at 11px beside the tab labels it was easy to miss
+   entirely - Marc's report was "it is there but not very visible".
+
+   So: a dial that fills as the slice proceeds. The track is the part still to
+   come (dark grey), the arc is the part already done (black), and the hand
+   points at the current position - the same reading as a kitchen timer, which
+   needs no legend. It is driven by REAL progress reported out of the slicing
+   loop, not by an animation pretending to know. */
+#busy { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-variant-numeric: tabular-nums; }
+#busy-ring { width: 19px; height: 19px; flex: none; transform: rotate(-90deg); }
+#busy-ring circle { fill: none; stroke-width: 4; }
+#busy-ring .track { stroke: #8c8c8c; }
+#busy-ring .arc {
+  stroke: var(--ink, #111); stroke-linecap: butt;
+  /* r=16 -> circumference 100.53; JS sets the dashoffset */
+  stroke-dasharray: 100.53; stroke-dashoffset: 100.53;
 }
-@keyframes dl-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { #busy .spin { animation-duration: 2.4s; } }
+#busy-ring .hand {
+  stroke: var(--ink, #111); stroke-width: 3.4; stroke-linecap: round;
+  transform-origin: 20px 20px;
+}
+/* Before the first progress report - and on the desktop transport, which has
+   no channel for mid-call messages - there is nothing honest to fill, so the
+   whole dial sweeps instead and the text stays qualitative. */
+#busy-ring.indeterminate { animation: dl-spin 1.1s linear infinite; }
+#busy-ring.indeterminate .arc { stroke-dashoffset: 75.4; }
+#busy-ring.indeterminate .hand { display: none; }
+@keyframes dl-spin { to { transform: rotate(310deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #busy-ring.indeterminate { animation-duration: 3s; }
+  #busy-ring .arc, #busy-ring .hand { transition: none !important; }
+}
 
 #unsupported {
   position: fixed; inset: 0; z-index: 100;

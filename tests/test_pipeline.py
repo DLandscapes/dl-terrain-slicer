@@ -854,3 +854,32 @@ def test_selftest_exits_without_unwinding_the_interpreter():
 
     assert raised, "selftest returned normally instead of leaving via os._exit"
     assert calls.get("code") == 0
+
+
+def test_slice_reports_monotonic_progress_that_reaches_the_total(hills):
+    """The countdown and the ring are only honest if this contract holds.
+
+    The frontend derives "about 30 seconds left" from elapsed time against the
+    fraction reported done, so the count must never go backwards (the estimate
+    would jump around) and must actually arrive at the total (the ring must not
+    stop at 90% on a finished slice). Nothing here checks timing - only that the
+    signal is well-formed.
+    """
+    seen = []
+    result = slice_dtm(hills, default_params(),
+                       progress=lambda done, total: seen.append((done, total)))
+
+    assert seen, "no progress was reported at all"
+    totals = {t for _, t in seen}
+    assert len(totals) == 1, f"the total changed mid-run: {totals}"
+    total = totals.pop()
+    dones = [d for d, _ in seen]
+    assert dones == sorted(dones), "progress went backwards"
+    assert dones[-1] == total, f"finished at {dones[-1]} of {total}"
+    assert result.n_levels > 0
+
+
+def test_slice_without_progress_callback_still_works(hills):
+    """progress is optional - the desktop transport passes nothing."""
+    r = slice_dtm(hills, default_params())
+    assert r.n_levels > 0

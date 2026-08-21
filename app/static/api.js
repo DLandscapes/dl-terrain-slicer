@@ -120,6 +120,10 @@ function serverApi() {
   return {
     mode: "server",
     onProgress: null,
+    // Declared so app.js can assign it uniformly; the desktop transport has no
+    // channel for messages mid-request, so it never fires and the indicator
+    // falls back to counting up. A capability, not a transport check.
+    onSliceProgress: null,
     ready: async () => {},
     version: async () => asJson(await fetch("api/version")),
     demo: async () => asJson(await fetch("api/demo", { method: "POST" })),
@@ -170,11 +174,21 @@ function wasmApi() {
   const self_ = {
     mode: "wasm",
     onProgress: null,
+    onSliceProgress: null,   // (done, total) while a slice runs; wasm only
   };
 
   worker.onmessage = (ev) => {
     const m = ev.data;
     if (m.type === "progress") {
+      // step "slice" carries done/total from inside the slicing loop; every
+      // other step is boot progress and carries a detail string. Exposed as a
+      // CAPABILITY (onSliceProgress may simply never fire) rather than
+      // something app.js has to ask the transport about - the desktop build
+      // has no channel for mid-call messages and the UI falls back on its own.
+      if (m.step === "slice") {
+        if (self_.onSliceProgress) self_.onSliceProgress(m.done, m.total);
+        return;
+      }
       if (self_.onProgress) self_.onProgress(m.step, m.detail || "");
       return;
     }

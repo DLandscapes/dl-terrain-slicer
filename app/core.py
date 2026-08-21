@@ -28,7 +28,7 @@ from app.png import hillshade_png
 # tags in app/static/index.html. The frontend compares this at startup and
 # tells the user to restart the server if the running process is older than
 # the files on disk.
-APP_BUILD = 29
+APP_BUILD = 30
 
 MAX_UPLOADS = 8
 
@@ -143,8 +143,14 @@ def remove_hatch(store: Store, upload_id: str, hatch_id: str) -> dict:
     return {"removed": len(entries) != len(store.hatches[upload_id])}
 
 
-def run(store: Store, upload_id: str, params_dict: dict):
-    """Slice + nest. Returns (dtm, params, SliceResult, NestResult)."""
+def run(store: Store, upload_id: str, params_dict: dict, progress=None):
+    """Slice + nest. Returns (dtm, params, SliceResult, NestResult).
+
+    `progress(done, total)`, if given, is called as the slice advances so a
+    transport that can deliver mid-call messages (the browser worker) can
+    drive a real countdown and progress ring. Optional: the desktop path
+    passes nothing and the frontend falls back to counting up.
+    """
     dtm = store.get_dtm(upload_id)
     params = SliceParams.from_dict(params_dict or {})
     errors = params.validate()
@@ -156,7 +162,7 @@ def run(store: Store, upload_id: str, params_dict: dict):
                 | {"name": stored["name"], "kind": stored.get("kind", "polygon")})
                for stored in store.hatches.get(upload_id, [])]
     try:
-        result = slice_dtm(dtm, params, hatches=hatches)
+        result = slice_dtm(dtm, params, hatches=hatches, progress=progress)
     except Exception as exc:
         # GEOS speaks in C++ exception names. Whatever slips past the
         # finite-ring guard in contours._filled_region, the user gets a
@@ -222,8 +228,8 @@ def export_payload(dtm, params, result, nested) -> tuple[bytes, str]:
     return data, name
 
 
-def do_slice(store: Store, upload_id: str, params_dict: dict) -> dict:
-    _dtm, params, result, nested = run(store, upload_id, params_dict)
+def do_slice(store: Store, upload_id: str, params_dict: dict, progress=None) -> dict:
+    _dtm, params, result, nested = run(store, upload_id, params_dict, progress=progress)
     return slice_payload(params, result, nested)
 
 

@@ -207,7 +207,8 @@ def _label_anchor(ring_area, width: float, height: float, min_height: float = 2.
     return None, 0.0
 
 
-def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
+def slice_dtm(dtm: DTM, params: SliceParams, hatches=None,
+              progress=None) -> SliceResult:
     """hatches: optional list of (polys, settings) - polys is a (Multi)Polygon
     in DTM-local world coordinates (x east from the west edge, y north from
     the south edge), settings a dict per hatch.DEFAULT_HATCH. Each layer is
@@ -235,6 +236,33 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
             f"- increase material thickness or scale")
     n_levels = len(levels)
 
+    # --- progress reporting -------------------------------------------------
+    # `progress(done, total)` is called as the slice advances. It exists because
+    # a countdown and a progress ring cannot be honest without it: this tool's
+    # cost is driven by CONTOUR COMPLEXITY, not file size, and measurements went
+    # badly non-monotonic (2 M cells 665 s vs 4.5 M cells 226 s). Anything
+    # estimated up front from the file would be a guess that goes wrong exactly
+    # on the models where the user is waiting longest.
+    #
+    # Three passes of n_levels units each - contour, simplify, boards. The equal
+    # weighting is a simplification, but the caller derives its estimate from
+    # measured elapsed time against the fraction done, so a wrong weight makes
+    # the estimate drift, not lie: it corrects itself as the run proceeds. What
+    # matters here is only that the count advances monotonically and finishes.
+    #
+    # Optional by design: the desktop transport does not carry it (it is 3-5x
+    # faster and has no channel for mid-call messages), and the frontend simply
+    # falls back to counting up. core.py stays transport-independent.
+    _total_units = max(1, 3 * n_levels)
+    _done_units = 0
+
+    def _tick(n: int = 1) -> None:
+        nonlocal _done_units
+        _done_units += n
+        if progress is not None:
+            progress(_done_units, _total_units)
+
+
     rows, cols = dtm.elevation.shape
     cell = dtm.cell_size
     x = np.arange(cols, dtype=np.float64) * cell
@@ -248,8 +276,10 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
     top = zmax + 10.0 * interval
     eps = 1e-9 * max(1.0, abs(zmax))
     dropped: list = []
-    regions = [_filled_region(gen, lv - eps if i else zmin - 1.0, top, dropped)
-               for i, lv in enumerate(levels)]
+    regions = []
+    for i, lv in enumerate(levels):
+        regions.append(_filled_region(gen, lv - eps if i else zmin - 1.0, top, dropped))
+        _tick()
     if dropped:
         warnings.append(
             f"{len(dropped)} degenerate contour ring(s) skipped - the terrain "
@@ -262,7 +292,11 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
     tol = params.simplify_mm
     if tol > 0:
         stubborn: list = []
-        scaled = [_simplify_safe(r, tol, stubborn) for r in scaled]
+        _simplified = []
+        for r in scaled:
+            _simplified.append(_simplify_safe(r, tol, stubborn))
+            _tick()
+        scaled = _simplified
         if stubborn:
             warnings.append(
                 f"{len(stubborn)} contour level(s) could not be simplified and "
@@ -402,6 +436,7 @@ def slice_dtm(dtm: DTM, params: SliceParams, hatches=None) -> SliceResult:
         hatch_entries: list[dict] = [
             {"color": prep["cfg"]["color"], "lines": []} for prep in hatch_prepped]
         for i in board_levels:
+            _tick()
             if i > 0:  # level 0's contour IS the board edge
                 cuts.extend(trimmed(i))
             if i + 1 < n_levels:
