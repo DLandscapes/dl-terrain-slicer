@@ -1,5 +1,7 @@
 # DL Terrain Slicer
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23510542.svg)](https://doi.org/10.5281/zenodo.23510542)
+
 Turns a digital terrain model into laser-ready DXF files for a stacked
 cardboard contour model, using the
 [horizontal contour offset method](https://digital-landscapes.com/horizontal-contour-model-offset-method/).
@@ -230,6 +232,19 @@ digital-landscapes.com relaunch brand pair, served locally from
 STL input, importing extra engrave linework (DXF/SVG → DLF-00),
 fixed-N-boards compatibility mode, label text along curves, tighter
 true-polygon nesting.
+
+## Citing
+
+Releases are archived on Zenodo, each with its own DOI (from v1.0.7):
+
+- **The tool, any version:** concept DOI
+  [10.5281/zenodo.23510542](https://doi.org/10.5281/zenodo.23510542) —
+  always resolves to the latest release.
+- **One specific release:** its version DOI, e.g. v1.0.7 =
+  [10.5281/zenodo.23510543](https://doi.org/10.5281/zenodo.23510543).
+
+GitHub's **Cite this repository** button (from `CITATION.cff`) gives a
+ready-made reference for the release it describes.
 
 ## License & disclaimer
 
