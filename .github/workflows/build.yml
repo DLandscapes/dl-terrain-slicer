@@ -29,8 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Citation version matches the tag
-        # Zenodo archives every release; a CITATION.cff that still names the
-        # previous version would be archived with it, permanently
+        # each release is deposited on Zenodo from its tag; a CITATION.cff
+        # that still names the previous version would be archived with it,
+        # permanently
         if: ${{ github.ref_type == 'tag' }}
         shell: pwsh
         run: |

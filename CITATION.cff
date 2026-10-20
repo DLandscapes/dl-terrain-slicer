@@ -1,12 +1,12 @@
 # Citation metadata. GitHub renders this into a "Cite this repository"
-# button. Zenodo reads .zenodo.json instead (it wins when both exist), so the
-# two files must say the same thing - change one, change the other.
+# button.
 #
-# No `doi` yet, deliberately: every release is archived by the Zenodo-GitHub
-# integration, which mints the DOI AFTER the tag, so a tagged file can never
-# name its own version DOI. The concept DOI (stable, always the latest
-# version) goes in here once the first archive exists. A dead DOI is worse
-# than none.
+# `doi` is the VERSION DOI, reserved on Zenodo before the tag - the same
+# reserve-first route as DL-TerrainDiversity. That order is what lets the
+# archived snapshot carry a citation file that knows its own identifier;
+# the Zenodo-GitHub integration would mint it only after the tag. Every
+# release reserves a NEW one (Zenodo record -> New version -> Get a DOI
+# now!); never carry this one forward.
 #
 # `version` must equal the release tag without its "v" - CI refuses a tag
 # that does not match.
@@ -51,3 +51,4 @@ repository-code: "https://github.com/DLandscapes/dl-terrain-slicer"
 url: "https://digital-landscapes.com/terrain-slicer/"
 version: "1.0.7"
 date-released: "2026-10-20"
+doi: "10.5281/zenodo.23510543"

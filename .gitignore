@@ -21,6 +21,9 @@ __pycache__/
 # local exports / scratch
 demo_export*.zip
 
+# release artefacts handed out by hand (the Zenodo deposit zip, its form)
+/output/
+
 # browser build: the vendored Pyodide runtime (tens of MB, re-fetch with
 # web/fetch_pyodide.py) and the generated static bundle
 web/vendor/
