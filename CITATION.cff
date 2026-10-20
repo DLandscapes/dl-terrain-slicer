@@ -1,0 +1,53 @@
+# Citation metadata. GitHub renders this into a "Cite this repository"
+# button. Zenodo reads .zenodo.json instead (it wins when both exist), so the
+# two files must say the same thing - change one, change the other.
+#
+# No `doi` yet, deliberately: every release is archived by the Zenodo-GitHub
+# integration, which mints the DOI AFTER the tag, so a tagged file can never
+# name its own version DOI. The concept DOI (stable, always the latest
+# version) goes in here once the first archive exists. A dead DOI is worse
+# than none.
+#
+# `version` must equal the release tag without its "v" - CI refuses a tag
+# that does not match.
+cff-version: 1.2.0
+title: "DL-TerrainSlicer"
+message: "If you use this software, please cite it using these metadata."
+type: software
+authors:
+  - family-names: Ihle
+    given-names: Marc-Eduard
+    # Standing rule: a Digital Landscapes tool names Digital Landscapes,
+    # never a university.
+    affiliation: "Digital Landscapes"
+abstract: >-
+  Turns a digital terrain model into laser-ready DXF files for a stacked
+  cardboard contour model, using the horizontal contour offset method: the
+  terrain is sliced into contour levels at material-thickness intervals and
+  distributed onto N boards, board k carrying contours k, k+N, k+2N, ... as
+  in-place cutlines, so every contour is cut exactly once and the pieces are
+  rings rather than solid slabs. Output is one DXF per material sheet with
+  one layer per laser pass, plus a cutting report. Reads GeoTIFF terrain
+  models and OBJ terrain meshes; polygon, line and point shapefiles become
+  hatching, scored linework and circles. Contour numbers are engraved in
+  single-stroke Hershey fonts, hidden in the glue zone by default. Runs as a
+  desktop application (Windows, macOS) or entirely in the browser
+  (Pyodide/WebAssembly); terrain data is processed locally and never
+  transmitted. A standalone replacement for a Grasshopper definition - no
+  Rhino, no GDAL, no GIS licence.
+keywords:
+  - digital terrain model
+  - terrain model
+  - contour model
+  - offset method
+  - laser cutting
+  - digital fabrication
+  - physical model
+  - DXF
+  - GeoTIFF
+  - landscape architecture
+license: GPL-3.0-only
+repository-code: "https://github.com/DLandscapes/dl-terrain-slicer"
+url: "https://digital-landscapes.com/terrain-slicer/"
+version: "1.0.7"
+date-released: "2026-10-20"

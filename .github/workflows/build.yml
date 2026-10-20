@@ -28,6 +28,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Citation version matches the tag
+        # Zenodo archives every release; a CITATION.cff that still names the
+        # previous version would be archived with it, permanently
+        if: ${{ github.ref_type == 'tag' }}
+        shell: pwsh
+        run: |
+          $line = Select-String -Path CITATION.cff -Pattern '^version:\s*"?([^"\s]+)"?' | Select-Object -First 1
+          $cff = $line.Matches[0].Groups[1].Value
+          $tag = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($cff -ne $tag) { Write-Error "CITATION.cff says version $cff, the tag is $env:GITHUB_REF_NAME"; exit 1 }
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
