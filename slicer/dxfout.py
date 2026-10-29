@@ -78,7 +78,7 @@ def sheet_to_dxf(nest: NestResult, sheet_index: int, params: SliceParams) -> byt
     return buf.getvalue().encode("utf-8")
 
 
-def cutting_report(nest: NestResult, params: SliceParams, slice_result, dtm_summary: dict) -> str:
+def cutting_report(nest: NestResult, params: SliceParams, slice_result) -> str:
     lines = [
         "DL TerrainSlicer - cutting report",
         f"date: {date.today().isoformat()}",
@@ -136,10 +136,10 @@ def cutting_report(nest: NestResult, params: SliceParams, slice_result, dtm_summ
     return "\n".join(lines)
 
 
-def export_zip(nest: NestResult, params: SliceParams, slice_result, dtm_summary: dict) -> bytes:
+def export_zip(nest: NestResult, params: SliceParams, slice_result) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for s in range(nest.n_sheets):
             zf.writestr(f"sheet_{s + 1:02d}.dxf", sheet_to_dxf(nest, s, params))
-        zf.writestr("cutting_report.txt", cutting_report(nest, params, slice_result, dtm_summary))
+        zf.writestr("cutting_report.txt", cutting_report(nest, params, slice_result))
     return buf.getvalue()

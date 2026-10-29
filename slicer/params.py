@@ -1,7 +1,6 @@
 """Slicing parameters, mirroring the sliders of DL-Contour_offset_method_011.gh."""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field, fields
 
 
@@ -80,10 +79,6 @@ class SliceParams:
     def world_to_model(self) -> float:
         """Factor from DTM units (m) to model mm in plan."""
         return 1000.0 / self.scale
-
-    def level_count(self, zmin: float, zmax: float) -> int:
-        n = int(math.floor((zmax - zmin) / self.world_interval)) + 1
-        return max(1, min(n, self.max_levels))
 
     @classmethod
     def from_dict(cls, d: dict) -> "SliceParams":

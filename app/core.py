@@ -223,7 +223,7 @@ def export_payload(dtm, params, result, nested) -> tuple[bytes, str]:
     """The export ZIP and its download filename, from an already-run pipeline."""
     if nested.n_sheets == 0:
         raise SlicerError(422, "nothing to export - no pieces were placed")
-    data = export_zip(nested, params, result, dtm.summary())
+    data = export_zip(nested, params, result)
     name = (Path(dtm.source_name).stem or "terrain") + "_laser.zip"
     return data, name
 

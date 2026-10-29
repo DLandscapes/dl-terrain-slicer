@@ -17,7 +17,6 @@ from __future__ import annotations
 from .hershey_data import FONTS
 
 DEFAULT_FONT = "simplex"
-FONT_NAMES = list(FONTS)
 
 
 def _rdp(points: list[tuple], tol: float) -> list[tuple]:

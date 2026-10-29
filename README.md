@@ -17,7 +17,7 @@ scored onto the model. You can try everything without your own data first.
 ### 1. Download
 
 In the right-hand sidebar, under **Releases**, click the newest release
-(e.g. "DL Terrain Slicer v0.1.0") — the *name*, not just the sidebar box.
+(titled "DL Terrain Slicer v…") — the *name*, not just the sidebar box.
 That opens the release page. Scroll to the bottom, to **Assets**, and pick
 the file for your computer:
 

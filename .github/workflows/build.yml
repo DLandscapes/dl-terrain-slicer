@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       macos:
-        description: "Also build macOS (costs ~100 billed minutes - tags always do)"
+        description: "Also build macOS (tags always do)"
         type: boolean
         default: false
 
@@ -63,10 +63,10 @@ jobs:
           if-no-files-found: error
 
   macos:
-    # Every release gets macOS builds. Manual runs do not unless asked for:
-    # macOS runners bill at a 10x multiplier, so a release costs roughly 100
-    # of the 2000 free minutes a month - fine for releases, wasteful for
-    # iterating on a Windows-only change.
+    # Every release gets macOS builds. Manual runs do not unless asked for, to
+    # keep a quick check of a Windows-only change quick. (Cost is no longer the
+    # reason: the repository is public, and GitHub's standard runners - macOS
+    # included - are free for public repositories.)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.macos }}
     runs-on: ${{ matrix.runner }}
     strategy:

@@ -50,9 +50,12 @@ directory, like the site's fonts.
 
 ## Deploying
 
-Upload `web/dist/` into a versioned directory (e.g. `/terrain-slicer/v1/`)
-and embed that URL in a WordPress page. All asset paths are relative, so any
-sub-directory works.
+Upload `web/dist/` into a versioned directory and embed that URL in a
+WordPress page — on digital-landscapes.com that is `/terrain-slicer-app/v1/`.
+All asset paths are relative, so any sub-directory works, with one exception:
+never name the directory after the page's own slug (`/terrain-slicer/`).
+WordPress serves a real directory before a page of the same name, so the page
+would disappear behind it.
 
 The web server must send `.wasm` as `application/wasm`, otherwise the
 runtime refuses to start.
@@ -65,7 +68,7 @@ Everything runs in one tab, so the guards in `api.js` apply:
 |---|---|
 | file size | warn at 50 MB, refuse at 200 MB |
 | raster size | warn at 20 M cells, refuse at 60 M cells (read from the TIFF header, before decoding) |
-| OBJ meshes | not supported — the per-triangle rasteriser is too slow in WASM; desktop version only |
+| OBJ meshes | supported since build 22, when the rasteriser was vectorised; a dense mesh takes several seconds |
 
 ## Verifying a build
 

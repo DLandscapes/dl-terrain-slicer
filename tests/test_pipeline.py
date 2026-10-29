@@ -302,7 +302,7 @@ def test_dxf_roundtrip(hills):
     result = slice_dtm(hills, params)
     nested = nest(result.pieces, params.sheet_width_mm, params.sheet_height_mm,
                   params.sheet_margin_mm, params.part_spacing_mm)
-    blob = export_zip(nested, params, result, hills.summary())
+    blob = export_zip(nested, params, result)
     zf = zipfile.ZipFile(io.BytesIO(blob))
     names = zf.namelist()
     assert "cutting_report.txt" in names
@@ -604,7 +604,7 @@ def test_multiple_hatch_layers_in_dxf(hills):
     assert colors == {"cyan", "blue"}
     nested = nest(result.pieces, params.sheet_width_mm, params.sheet_height_mm,
                   params.sheet_margin_mm, params.part_spacing_mm)
-    blob = export_zip(nested, params, result, hills.summary())
+    blob = export_zip(nested, params, result)
     zf = zipfile.ZipFile(io.BytesIO(blob))
     n = {}
     for name in zf.namelist():
@@ -647,7 +647,7 @@ def test_shp_line_and_point_readers():
 
 def test_linetypes_make_real_segments():
     from shapely.geometry import LineString
-    from slicer.hatch import apply_linetype, LINETYPES
+    from slicer.hatch import apply_linetype
     line = LineString([(0, 0), (100, 0)])
     solid = apply_linetype(line, "solid")
     assert len(solid) == 1 and len(solid[0]) == 2
@@ -689,7 +689,7 @@ def test_report_mentions_interval(hills):
     result = slice_dtm(hills, params)
     nested = nest(result.pieces, params.sheet_width_mm, params.sheet_height_mm,
                   params.sheet_margin_mm, params.part_spacing_mm)
-    blob = export_zip(nested, params, result, hills.summary())
+    blob = export_zip(nested, params, result)
     report = zipfile.ZipFile(io.BytesIO(blob)).read("cutting_report.txt").decode()
     assert "real-world contour interval: 2" in report
     assert "DLF-05_cut_outer" in report

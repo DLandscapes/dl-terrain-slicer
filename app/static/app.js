@@ -1042,9 +1042,6 @@ $("#st-prev").addEventListener("click", () => stepBy(-1));
 $("#st-next").addEventListener("click", () => stepBy(1));
 
 /* ---------- helpers ---------- */
-function getCss(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#ccc";
-}
 function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? +v.toFixed(1) + "" : v.toPrecision(2);
 }

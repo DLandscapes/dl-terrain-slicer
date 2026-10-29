@@ -1,37 +1,42 @@
-DL TERRAIN SLICER - HOW TO START
-=================================
+DL TERRAIN SLICER - HOW TO START FROM THE SOURCE CODE
+=====================================================
+
+This is for running the app from its source code, which needs Python.
+Most people want the packaged download instead, which needs nothing:
+see README.md, "Getting started".
 
 The app runs locally on your computer. No internet needed.
 
 
 OPTION 1 - DOUBLE-CLICK (easiest)
 ---------------------------------
-1. Open the folder:  D:\Claude Code Projects\DL-TerrainSlicer
+1. Open the project folder (the one this file is in).
 2. Double-click:     start.bat
-   - A black console window opens (this is the server - keep it open)
-   - Your browser opens at http://localhost:8765 automatically
-   - If the page shows an error at first, wait 2 seconds and press F5
-3. To STOP the app: close the black console window
+   - A console window opens. It is the app's engine - keep it open.
+   - Your browser opens the app by itself, on port 8765 - or on the next
+     free port if 8765 is taken, so a second copy never fights the first.
+3. To STOP the app: close the console window
    (or press Ctrl+C inside it)
 
 
-OPTION 2 - MANUALLY VIA POWERSHELL / TERMINAL
----------------------------------------------
-1. Open PowerShell (Windows key, type "powershell", Enter)
-2. Paste these two lines and press Enter:
+OPTION 2 - FROM POWERSHELL / A TERMINAL
+---------------------------------------
+1. Open PowerShell in the project folder.
+2. Run:
 
-   cd "D:\Claude Code Projects\DL-TerrainSlicer"
-   .venv\Scripts\python.exe -m uvicorn app.main:app --port 8765
+   .venv\Scripts\python.exe launcher.py
 
-3. Open your browser at:  http://localhost:8765
-4. To STOP: press Ctrl+C in the PowerShell window
+   Options: --port 9000 insists on one port, --no-browser does not open
+   a browser window.
+3. To STOP: press Ctrl+C in the PowerShell window
 
 
 USING THE APP
 -------------
 - Drop a GeoTIFF DTM (.tif) or an OBJ terrain mesh (.obj) into the
   upload field - or click "load demo terrain" to try it out.
-- Optionally load a polygon shapefile (.shp) under "Hatch areas".
+- Optionally add shapefiles (.shp): polygons become hatched areas,
+  lines become scored linework, points become circles.
 - Adjust parameters; the preview updates live.
 - "Export DXF (ZIP)" downloads one DXF per material sheet plus a
   cutting_report.txt with assembly notes.
@@ -39,15 +44,13 @@ USING THE APP
 
 IF IT DOES NOT START
 --------------------
-- "Port already in use": the app is already running - just open
-  http://localhost:8765 in the browser. Or another program uses
-  port 8765; change --port 8765 to e.g. --port 8766 (then browse
-  to http://localhost:8766).
-- ".venv missing" (e.g. after copying a backup to a new machine):
+- ".venv missing" (e.g. after copying the folder to a new machine):
   open PowerShell in the project folder and run once:
 
      python -m venv .venv
      .venv\Scripts\pip install -r requirements.txt
 
+  (if a package is missing for your Python version, use
+   py -3.12 -m venv .venv instead of the first line)
   then start normally as above.
 - The page looks broken after an update: hard-refresh with Ctrl+F5.
