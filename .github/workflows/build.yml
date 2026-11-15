@@ -2,7 +2,9 @@ name: Build downloads
 
 # Tagging a version builds the packaged downloads and attaches them to a
 # GitHub Release. Run it by hand first (Actions -> Build downloads -> Run
-# workflow) to check a change before committing to a tag.
+# workflow) to check a change before committing to a tag. A hand run with a
+# release tag rebuilds that release from its tag and adds only the downloads
+# it is missing (v1.0.8 lost its macOS arm64 file to a retired runner).
 on:
   push:
     tags: ["v*"]
@@ -12,6 +14,10 @@ on:
         description: "Also build macOS (tags always do)"
         type: boolean
         default: false
+      tag:
+        description: "Existing release to complete, e.g. v1.0.8 (empty = a test build)"
+        type: string
+        default: ""
 
 concurrency:
   group: build-${{ github.ref }}
@@ -22,23 +28,27 @@ env:
   # available for it on all three runners
   PYTHON_VERSION: "3.12"
   APP_NAME: DL-Terrain-Slicer
+  # the release this run builds: the pushed tag or the one named by hand
+  VERSION: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'dev' }}
 
 jobs:
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - name: Citation version matches the tag
         # each release is deposited on Zenodo from its tag; a CITATION.cff
         # that still names the previous version would be archived with it,
         # permanently
-        if: ${{ github.ref_type == 'tag' }}
+        if: ${{ env.VERSION != 'dev' }}
         shell: pwsh
         run: |
           $line = Select-String -Path CITATION.cff -Pattern '^version:\s*"?([^"\s]+)"?' | Select-Object -First 1
           $cff = $line.Matches[0].Groups[1].Value
-          $tag = $env:GITHUB_REF_NAME -replace '^v', ''
-          if ($cff -ne $tag) { Write-Error "CITATION.cff says version $cff, the tag is $env:GITHUB_REF_NAME"; exit 1 }
+          $tag = $env:VERSION -replace '^v', ''
+          if ($cff -ne $tag) { Write-Error "CITATION.cff says version $cff, the tag is $env:VERSION"; exit 1 }
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -53,9 +63,7 @@ jobs:
         run: dist/${{ env.APP_NAME }}/${{ env.APP_NAME }}.exe --selftest
       - name: Package
         shell: pwsh
-        run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "dev" }
-          Compress-Archive -Path "dist/$env:APP_NAME" -DestinationPath "$env:APP_NAME-$version-windows-x64.zip"
+        run: Compress-Archive -Path "dist/$env:APP_NAME" -DestinationPath "$env:APP_NAME-$env:VERSION-windows-x64.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
@@ -67,13 +75,15 @@ jobs:
     # keep a quick check of a Windows-only change quick. (Cost is no longer the
     # reason: the repository is public, and GitHub's standard runners - macOS
     # included - are free for public repositories.)
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.macos }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.macos || inputs.tag }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-14
+          # macos-14 was RETIRED by GitHub in Nov 2026 ("configuration
+          # 'macos-14-arm64-us-default' is not supported", v1.0.8)
+          - runner: macos-15
             label: macos-arm64
           # macos-13 was RETIRED by GitHub in Dec 2025 - jobs targeting it
           # queue forever (run #4 sat 5.5 h without a runner). macos-15-intel
@@ -83,6 +93,8 @@ jobs:
             label: macos-x64
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -96,12 +108,11 @@ jobs:
       - name: Self-test the packaged app
         run: dist/$APP_NAME/$APP_NAME --selftest
       - name: Package
+        # ditto, not zip: it preserves the executable bits and symlinks that
+        # a macOS build needs to still run after unpacking
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then version="$GITHUB_REF_NAME"; else version="dev"; fi
-          # ditto, not zip: it preserves the executable bits and symlinks that
-          # a macOS build needs to still run after unpacking
           ditto -c -k --sequesterRsrc --keepParent "dist/$APP_NAME" \
-            "$APP_NAME-$version-${{ matrix.label }}.zip"
+            "$APP_NAME-$VERSION-${{ matrix.label }}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.label }}
@@ -111,7 +122,7 @@ jobs:
   release:
     # only for tags, and only if the Windows build passed; a skipped macOS
     # job must not block the release
-    if: ${{ github.ref_type == 'tag' && !cancelled() && needs.windows.result == 'success' }}
+    if: ${{ (github.ref_type == 'tag' || inputs.tag) && !cancelled() && needs.windows.result == 'success' }}
     needs: [windows, macos]
     runs-on: ubuntu-latest
     permissions:
@@ -122,7 +133,18 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Add the downloads the release is missing
+        # files already published are never replaced
+        if: ${{ inputs.tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          have=$(gh release view "$VERSION" --json assets -q '.assets[].name')
+          for f in artifacts/*.zip; do
+            grep -qxF "$(basename "$f")" <<< "$have" || gh release upload "$VERSION" "$f"
+          done
       - name: Create the release
+        if: ${{ github.ref_type == 'tag' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
