@@ -35,18 +35,26 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 body {
-  display: flex; height: 100vh; overflow: hidden;
+  height: 100vh; overflow: hidden;
   font-family: var(--font-body);
   background: var(--bg); color: var(--ink);
 }
 
-/* ---------- sidebar ---------- */
+/* ---------- the menu: a floating window over the drawing ----------
+   The DL tool family's menu, after DL-TerrainDiversity: it drags by its
+   header, folds to the chip, and holds one open panel at a time. The gutter
+   is reserved so the content does not shift when a panel makes it scroll. */
 #sidebar {
-  width: 330px; min-width: 330px; height: 100%; overflow-y: auto; overflow-x: hidden;
-  background: var(--panel); border-right: 1px solid var(--line);
+  position: absolute; left: 12px; top: 12px; z-index: 4;
+  width: 330px; max-height: calc(100% - 24px); overflow-y: auto; overflow-x: hidden;
+  scrollbar-gutter: stable;
   display: flex; flex-direction: column; gap: 14px; padding: 18px;
+  background: rgba(255, 255, 255, .94); border: 1px solid var(--line); border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .10);
 }
-#sidebar header { display: flex; align-items: center; gap: 10px; }
+#sidebar.min, #readout.min { display: none; }
+#sidebar header { display: flex; align-items: center; gap: 10px; cursor: grab; user-select: none; }
+#sidebar.dragging header { cursor: grabbing; }
 #logo { width: 34px; height: 34px; flex: none; }
 /* The anchor wraps the logo tightly so the flex row measures exactly as it did
    before the link existed. line-height:0 keeps the inline-image descender gap
@@ -59,7 +67,7 @@ body {
 #title-link { color: inherit; text-decoration: none; border-radius: 3px; }
 #title-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 #title-link:focus-visible { outline: 2px solid var(--ink, #111); outline-offset: 2px; }
-#sidebar .sub { color: var(--ink-soft); font-size: .8rem; margin-top: 2px; }
+#sidebar header .sub { color: var(--ink-soft); font-size: .8rem; margin-top: 2px; }
 
 /* upload area: dashed only while empty, card once loaded */
 #dropzone { cursor: pointer; }
@@ -71,6 +79,7 @@ body {
 #drop-hint { display: flex; flex-direction: column; gap: 5px; }
 #drop-hint strong { font-size: .9rem; }
 #drop-hint span { color: var(--ink-soft); font-size: .78rem; }
+#drop-hint a { color: var(--ink); }
 
 #dtm-card {
   border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
@@ -99,17 +108,68 @@ body {
   background: #fdf3dd; border-top: 1px solid var(--line);
 }
 
-/* ---------- parameter form ---------- */
-#params details { border-top: 1px solid var(--line); padding: 8px 0 6px; }
-#params summary {
-  cursor: pointer; font-family: var(--font-head); font-weight: 600; font-size: .8rem;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft);
-  list-style: none; margin-bottom: 6px; user-select: none;
+/* ---------- panels: one row per panel - icon, verb, badge, chevron ---------- */
+#menu-body { display: flex; flex-direction: column; gap: 14px; }
+details.panel { display: block; }
+details.panel + details.panel { border-top: 1px solid var(--line); padding-top: 11px; margin-top: 3px; }
+details.panel > summary {
+  display: flex; align-items: center; gap: 9px; padding: 5px 0;
+  cursor: pointer; list-style: none; user-select: none;
 }
-#params summary::-webkit-details-marker { display: none; }
-#params summary::after { content: "–"; float: right; }
-#params details:not([open]) summary::after { content: "+"; }
+details.panel > summary::-webkit-details-marker,
+details.sub > summary::-webkit-details-marker { display: none; }
+details.panel > summary > svg {
+  flex: none; width: 16px; height: 16px; color: var(--ink-soft);
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+details.panel > summary > h2 {
+  flex: 1; min-width: 0; font-family: var(--font-head); font-weight: 700; font-size: .78rem;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft);
+}
+details.panel > summary::after {
+  content: "\25BE"; flex: none; font-family: var(--font-head); font-size: .72rem;
+  color: var(--ink-soft); transform: rotate(-90deg); transition: transform .12s ease;
+}
+details.panel[open] > summary::after { transform: rotate(0deg); }
+details.panel[open] > summary > svg, details.panel[open] > summary > h2,
+details.panel > summary:hover > svg, details.panel > summary:hover > h2,
+details.panel > summary:hover::after { color: var(--ink); }
+.sec-body { display: flex; flex-direction: column; gap: 9px; margin-top: 9px; }
+/* what a CLOSED panel holds, beside its title; gone while it is open */
+.sec-badge {
+  margin-left: auto; max-width: 58%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-head); font-size: .66rem; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+}
+details.panel[open] > summary .sec-badge { display: none; }
+/* a fold inside a panel: indented on a hairline spine, so it reads as inside */
+details.sub { display: block; padding-left: 9px; border-left: 1px solid var(--line); margin-left: 1px; }
+details.sub > summary.subhead {
+  font-family: var(--font-head); font-weight: 700; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-soft); cursor: pointer; list-style: none; user-select: none;
+}
+details.sub > summary.subhead::before { content: "\25B8  "; font-size: .68rem; }
+details.sub[open] > summary.subhead::before { content: "\25BE  "; }
+details.sub > summary.subhead:hover { color: var(--ink); }
 
+/* fold and unfold: one control at one point, solid so it reads over any drawing */
+#menu-min { position: absolute; right: 12px; top: 8px; z-index: 5; }
+#menu-chip { position: absolute; left: 12px; top: 12px; z-index: 5; }
+#menu-chip, #menu-min {
+  width: 30px; height: 26px; display: flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer; font-family: var(--font-head); font-size: .74rem; line-height: 1;
+  background: #4a4a4a; border: 1px solid #4a4a4a; border-radius: 4px; color: #fff;
+}
+#menu-chip:hover, #menu-min:hover { background: #000; border-color: #000; }
+
+/* the readings window, right: what the slice says back */
+#readout {
+  position: absolute; right: 12px; bottom: 40px; z-index: 4; width: 264px;
+  max-height: calc(100% - 100px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px;
+  background: rgba(255, 255, 255, .94); border: 1px solid var(--line); border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .10);
+}
+/* ---------- parameter form ---------- */
 #params label {
   display: grid; grid-template-columns: 1fr 110px; align-items: center;
   gap: 10px; font-size: .84rem; padding: 3px 0; min-height: 30px;
@@ -198,13 +258,13 @@ body {
 #sidebar footer { margin-top: auto; font-size: .72rem; color: var(--ink-soft); }
 #sidebar footer a { color: var(--ink-soft); text-decoration: none; }
 #sidebar footer a:hover { color: var(--ink); text-decoration: underline; }
-.legend { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-bottom: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: .72rem; color: var(--ink-soft); }
 .legend span { display: flex; align-items: center; gap: 5px; }
 .legend i { width: 14px; height: 3px; display: inline-block; flex: none; }
 .legend i.box { height: 9px; }
 
 /* ---------- main (viewport is white; beige stays in the sidebar only) ---------- */
-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; background: #fff; }
+main { position: absolute; inset: 0; background: #fff; }
 #brandmark {
   position: absolute; right: 16px; bottom: 12px;
   display: flex; align-items: center; gap: 7px;
@@ -213,15 +273,23 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 }
 #brandmark:hover { color: var(--ink); }
 #brandmark:hover img { opacity: 1; }
-#brandmark img { width: 18px; height: 18px; opacity: .75; }
-#tabs { display: flex; gap: 4px; padding: 10px 14px 0; align-items: baseline; }
-.tab {
-  font: inherit; font-family: var(--font-head); font-size: .85rem; padding: 6px 16px; cursor: pointer;
-  border: 1px solid var(--line); border-bottom: none;
-  border-radius: 6px 6px 0 0; background: var(--panel); color: var(--ink-soft);
+/* mark to the RIGHT of the wordmark, sized with the text (the DL convention) */
+#brandmark { flex-direction: row-reverse; }
+#brandmark img { width: 1.15em; height: 1.15em; opacity: .75; }
+/* the two views, top centre - clear of the menu on the left and the fold
+   button on the right; the hint line wraps beneath so the tabs never move */
+#tabs {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 4px; width: max-content; max-width: 46vw;
 }
-.tab.active { color: var(--ink); font-weight: 600; background: #fff; }
-#busy, #stack-hint, #sheets-hint { margin-left: 12px; font-size: .78rem; color: var(--ink-soft); }
+.tab {
+  font: inherit; font-family: var(--font-head); font-size: .85rem; padding: 5px 16px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, .92); color: var(--ink-soft);
+}
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--ink); font-weight: 600; border-color: var(--ink); background: #fff; }
+#busy, #stack-hint, #sheets-hint { flex-basis: 100%; text-align: center; justify-content: center; font-size: .78rem; color: var(--ink-soft); }
 #busy { font-size: .82rem; font-weight: 600; }
 /* A CLOCK, not just the word "slicing…". Two problems with the earlier
    spinner: it counted UP, which tells you how long you have already waited but
@@ -266,11 +334,11 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 #unsupported .boot-box { max-width: 460px; }
 #unsupported p { margin-top: 10px; font-size: .85rem; color: var(--ink-soft); line-height: 1.5; }
 #unsupported a, #boot a { color: var(--ink); }
-#canvas { flex: 1; width: 100%; min-height: 0; }
-#stack3d { flex: 1; min-height: 0; position: relative; }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#stack3d { position: absolute; inset: 0; }
 #stack3d canvas { display: block; }
 #stack-tools {
-  position: absolute; top: 10px; left: 10px; z-index: 5;
+  position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 3;
   display: flex; align-items: center; gap: 8px;
   background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 6px;
   padding: 5px 9px; font-size: .78rem; color: var(--ink-soft);
@@ -289,7 +357,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 /* Axis gizmo, top right - visually identical to DL-TerrainCare's, so the DL
    tools navigate the same way. */
 #gizmo {
-  position: absolute; right: 10px; top: 10px; z-index: 5;
+  position: absolute; right: 12px; top: 44px; z-index: 3;
   display: flex; flex-direction: column; gap: 4px;
 }
 #gizmo .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
@@ -304,7 +372,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 #gizmo .proj { width: 100%; }
 
 #stack-info {
-  position: absolute; left: 10px; bottom: 10px; z-index: 5;
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3;
   background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 6px;
   padding: 6px 10px; font-size: .82rem; color: var(--ink);
 }
@@ -335,3 +403,15 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: r
 .boot-bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s ease; }
 #boot.failed .boot-bar i { background: #c0392b; }
 #boot.failed #boot-step { color: #c0392b; }
+
+/* ---------- a phone (last, so it overrides the rules above) ----------
+   the menu opens over the drawing and leaves the fold button free; the
+   readings slip under the open menu and stay when it folds; no mouse, so no
+   mouse hints; the empty-state line clears the brandmark */
+@media (max-width: 420px) {
+  #sidebar { width: calc(100% - 60px); }
+  #readout { z-index: 3; }
+  #readout.min { display: flex; }
+  #stack-hint, #sheets-hint { display: none; }
+  #empty-state { bottom: 40px; }
+}

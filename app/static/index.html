@@ -7,7 +7,7 @@
 <!-- asset paths are RELATIVE on purpose: the browser build is hosted in a
      sub-directory (e.g. /terrain-slicer/v1/), the server build at / -->
 <link rel="icon" type="image/png" href="static/logo-dl.png">
-<link rel="stylesheet" href="static/style.css?v=31">
+<link rel="stylesheet" href="static/style.css?v=32">
 </head>
 <body>
 <!-- Shown INSTEAD of the app when the browser cannot run the engine. Filled in
@@ -25,8 +25,13 @@
   </div>
 </div>
 
+<!-- The menu is a FLOATING WINDOW over the drawing, the same family as the
+     other DL tools (ported from DL-TerrainDiversity): it drags by its header,
+     folds to the chip on the drawing, and opens one panel at a time, in the
+     order the work happens. sidebar.js does all of that; app.js only reads the
+     controls, whose ids and names are unchanged. -->
 <aside id="sidebar">
-  <header>
+  <header id="menu-head" title="drag to move the menu">
     <!-- The header logo is the first thing a visitor clicks to get "back".
          Opens in a new tab like the brandmark does, deliberately: the app holds
          a loaded terrain and its parameters in memory, and a same-tab navigation
@@ -46,12 +51,22 @@
     </div>
   </header>
 
+  <!-- ONE form around every panel: app.js reads its named fields and re-slices
+       on its input events. Every button inside is type="button". -->
+  <form id="params" autocomplete="off">
+  <div id="menu-body">
+  <!-- section icons: Feather (https://feathericons.com), MIT License,
+       Copyright (c) 2013-2017 Cole Bemis -->
+
+  <details class="panel" id="sec-import" open>
+    <summary><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><h2>Import</h2><span class="sec-badge" id="b-import"></span></summary>
+    <div class="sec-body">
   <div id="dropzone" tabindex="0">
-    <input type="file" id="file-input" accept=".tif,.tiff,.obj" hidden>
+    <input type="file" id="file-input" accept=".tif,.tiff,.asc,.obj,.stl" hidden>
     <div id="drop-hint">
-      <strong>Drop a GeoTIFF DTM or OBJ mesh here</strong>
-      <span>or click to choose a file</span>
-      <span><a href="#" id="demo-link">load demo terrain</a></span>
+      <strong>Drop a terrain here</strong>
+      <span>GeoTIFF or ASCII grid &middot; OBJ or STL mesh</span>
+      <span>or click to choose a file &middot; <a href="#" id="demo-link">load demo terrain</a></span>
     </div>
     <div id="dtm-card" hidden>
       <img id="hillshade" alt="hillshade preview">
@@ -63,10 +78,12 @@
       <div id="dtm-notes" hidden></div>
     </div>
   </div>
+    </div>
+  </details>
 
-  <form id="params" autocomplete="off">
-    <details open>
-      <summary>Model</summary>
+  <details class="panel" id="sec-slice">
+    <summary><svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><h2>Slice</h2><span class="sec-badge" id="b-slice"></span></summary>
+    <div class="sec-body">
       <label><span>Scale 1&nbsp;:</span>
         <input type="number" name="scale" value="500" min="1" step="50"></label>
       <label><span>Material thickness <em>mm</em></span>
@@ -83,20 +100,35 @@
       <label class="check" title="Layer 0: a full-footprint bottom board the whole model sits on. Uncheck to start stacking directly with contour 1 and save one board of material.">
         <input type="checkbox" name="base_plate" checked>
         <span>Base plate (layer&nbsp;0)</span></label>
-    </details>
-    <details open>
-      <summary>Material sheet</summary>
-      <label><span>Width <em>mm</em></span>
+      <details class="sub" id="sec-slice-detail">
+        <summary class="subhead">Detail</summary>
+        <div class="sec-body">
+      <label><span>Min curve length <em>mm</em></span>
+        <input type="number" name="min_length_mm" value="10" min="0" step="1"></label>
+      <label><span>Simplify tolerance <em>mm</em></span>
+        <input type="number" name="simplify_mm" value="0.2" min="0" step="0.1"></label>
+        </div>
+      </details>
+    </div>
+  </details>
+
+  <details class="panel" id="sec-nest">
+    <summary><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><h2>Nest</h2><span class="sec-badge" id="b-nest"></span></summary>
+    <div class="sec-body">
+      <label><span>Sheet width <em>mm</em></span>
         <input type="number" name="sheet_width_mm" value="1000" min="50" step="10"></label>
-      <label><span>Height <em>mm</em></span>
+      <label><span>Sheet height <em>mm</em></span>
         <input type="number" name="sheet_height_mm" value="700" min="50" step="10"></label>
       <label><span>Margin <em>mm</em></span>
         <input type="number" name="sheet_margin_mm" value="10" min="0" step="1"></label>
       <label><span>Part spacing <em>mm</em></span>
         <input type="number" name="part_spacing_mm" value="5" min="0" step="1"></label>
-    </details>
-    <details open>
-      <summary>Labels</summary>
+    </div>
+  </details>
+
+  <details class="panel" id="sec-label">
+    <summary><svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg><h2>Label</h2><span class="sec-badge" id="b-label"></span></summary>
+    <div class="sec-body">
       <label title="0 = no contour numbers at all; 0.5 = only where a readable label fits the ring; 1 = force a (possibly tiny) number onto every ring.">
         <span>Density <em>none &rarr; every layer</em></span>
         <input type="range" name="label_density" value="0.5" min="0" max="1" step="0.05"></label>
@@ -113,61 +145,96 @@
         <input type="number" name="label_height_mm" value="3" min="1" step="0.5"></label>
       <label><span>Control points <em>full &rarr; least</em></span>
         <input type="range" name="label_simplify" value="0.3" min="0" max="1" step="0.05"></label>
-    </details>
-    <details open>
-      <summary>Hatch areas &middot; polygons</summary>
+    </div>
+  </details>
+
+  <!-- Vector files from GIS and CAD - shapefile, DXF, GeoJSON, GML, GeoPackage.
+       Any drop zone takes any of them: a file's areas, lines and points each
+       get their own card, in their own fold, whichever zone it was dropped on. -->
+  <details class="panel" id="sec-engrave">
+    <summary><svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg><h2>Engrave</h2><span class="sec-badge" id="b-engrave"></span></summary>
+    <div class="sec-body">
+      <details class="sub" id="sec-eng-polygon">
+        <summary class="subhead">Areas &middot; hatching</summary>
+        <div class="sec-body">
       <div id="hatch-list" data-kind="polygon"></div>
       <div class="shp-drop" data-kind="polygon">
-        <input type="file" accept=".shp" hidden multiple>
-        <span>+ Add or drop polygon shapefile (.shp)&hellip;</span>
+        <input type="file" accept=".shp,.dxf,.geojson,.json,.gml,.gpkg" hidden multiple>
+        <span>+ Add or drop areas &mdash; .shp .dxf .geojson .gml .gpkg&hellip;</span>
       </div>
-    </details>
-    <details open>
-      <summary>Line features</summary>
+        </div>
+      </details>
+      <details class="sub" id="sec-eng-line">
+        <summary class="subhead">Lines</summary>
+        <div class="sec-body">
       <div id="line-list" data-kind="line"></div>
       <div class="shp-drop" data-kind="line">
-        <input type="file" accept=".shp" hidden multiple>
-        <span>+ Add or drop line shapefile (.shp)&hellip;</span>
+        <input type="file" accept=".shp,.dxf,.geojson,.json,.gml,.gpkg" hidden multiple>
+        <span>+ Add or drop lines &mdash; .shp .dxf .geojson .gml .gpkg&hellip;</span>
       </div>
-    </details>
-    <details open>
-      <summary>Point features</summary>
+        </div>
+      </details>
+      <details class="sub" id="sec-eng-point">
+        <summary class="subhead">Points</summary>
+        <div class="sec-body">
       <div id="point-list" data-kind="point"></div>
       <div class="shp-drop" data-kind="point">
-        <input type="file" accept=".shp" hidden multiple>
-        <span>+ Add or drop point shapefile (.shp)&hellip;</span>
+        <input type="file" accept=".shp,.dxf,.geojson,.json,.gml,.gpkg" hidden multiple>
+        <span>+ Add or drop points &mdash; .shp .dxf .geojson .gml .gpkg&hellip;</span>
       </div>
-    </details>
-    <details>
-      <summary>Detail</summary>
-      <label><span>Min curve length <em>mm</em></span>
-        <input type="number" name="min_length_mm" value="10" min="0" step="1"></label>
-      <label><span>Simplify tolerance <em>mm</em></span>
-        <input type="number" name="simplify_mm" value="0.2" min="0" step="0.1"></label>
-    </details>
+        </div>
+      </details>
+    </div>
+  </details>
+
+  <details class="panel" id="sec-export">
+    <summary><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><h2>Export</h2><span class="sec-badge" id="b-export"></span></summary>
+    <div class="sec-body">
+      <button id="export" type="button" disabled>Export DXF (ZIP)</button>
+      <div class="legend">
+        <span><i class="box" style="background:#000000"></i>engrave</span>
+        <span><i style="background:#0000ff"></i>score (light)</span>
+        <span><i style="background:#00c800"></i>score (medium)</span>
+        <span><i style="background:#00b4b4"></i>score (strong)</span>
+        <span><i style="background:#ff00ff"></i>cut (inner)</span>
+        <span><i style="background:#ff0000"></i>cut (outer)</span>
+      </div>
+    </div>
+  </details>
+
+  </div>
   </form>
 
-  <div id="stats" hidden></div>
-  <div id="warnings" hidden></div>
-
-  <button id="export" disabled>Export DXF (ZIP)</button>
-
   <footer>
-    <div class="legend">
-      <span><i class="box" style="background:#000000"></i>engrave</span>
-      <span><i style="background:#0000ff"></i>score (light)</span>
-      <span><i style="background:#00c800"></i>score (medium)</span>
-      <span><i style="background:#00b4b4"></i>score (strong)</span>
-      <span><i style="background:#ff00ff"></i>cut (inner)</span>
-      <span><i style="background:#ff0000"></i>cut (outer)</span>
-    </div>
     <a href="https://digital-landscapes.com/" target="_blank" rel="noopener">Digital Landscapes</a>
     &middot; contour offset method<br>
     GPLv3 &middot; no warranty &mdash; verify dimensions before cutting
   </footer>
 </aside>
+<!-- Inline and synchronous: restores the fold and the position before the
+     first paint, so the menu does not jump when sidebar.js catches up. -->
+<script>
+  try {
+    var _sb = document.getElementById("sidebar");
+    var _p = JSON.parse(localStorage.getItem("dl-terrainslicer.panel") || "{}");
+    if (_p.min) _sb.classList.add("min");
+    if (isFinite(_p.x) && isFinite(_p.y)) { _sb.style.left = _p.x + "px"; _sb.style.top = _p.y + "px"; }
+    var _s = JSON.parse(localStorage.getItem("dl-terrainslicer.sections") || "null");
+    if (_s) for (var _k in _s) { var _el = document.getElementById("sec-" + _k); if (_el) _el.open = !!_s[_k]; }
+  } catch (e) { /* storage unavailable: the defaults paint, which is correct */ }
+</script>
+
+<!-- What the slice says back: the right-hand window (left = what I change,
+     right = what I read). Shown only when there is something in it. -->
+<aside id="readout" hidden>
+  <div id="stats" hidden></div>
+  <div id="warnings" hidden></div>
+</aside>
 
 <main>
+  <!-- One control in one place: the chip lands where the fold button was. -->
+  <button id="menu-min" type="button" title="fold the menu away (Esc) &mdash; the &#9776; chip brings it back">&#8863;</button>
+  <button id="menu-chip" type="button" hidden title="bring the menu back (Esc)">&#9776;</button>
   <nav id="tabs">
     <button class="tab active" data-tab="sheets">Sheets</button>
     <button class="tab" data-tab="stack">Stack&nbsp;3D</button>
@@ -206,7 +273,7 @@
       <button id="proj" class="proj" type="button">Perspective</button>
     </div>
   </div>
-  <div id="empty-state">Load a GeoTIFF terrain model to begin.</div>
+  <div id="empty-state">Load a terrain to begin.</div>
   <!-- No (c) glyph next to the roundel: two different-sized circles side by
        side read badly (Marc, 2026-08-05). The logo IS the mark; the formal
        copyright notice lives in LICENSE, the sidebar and the page. -->
@@ -237,7 +304,9 @@
 <script src="static/vendor/three.min.js"></script>
 <script src="static/vendor/OrbitControls.js"></script>
 <!-- TS_MODE is injected here by web/build.py for the browser build -->
-<script src="static/api.js?v=31"></script>
-<script src="static/app.js?v=31"></script>
+<script src="static/api.js?v=32"></script>
+<script src="static/app.js?v=32"></script>
+<!-- a module, so its own `$` cannot collide with app.js's global one -->
+<script type="module" src="static/sidebar.js?v=32"></script>
 </body>
 </html>

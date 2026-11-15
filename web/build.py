@@ -38,7 +38,7 @@ DIST = WEB / "dist"
 MARKER = ".dl-terrainslicer-dist"   # only a folder carrying this is ever wiped
 
 # copied verbatim from app/static into dist/static
-STATIC_FILES = ["app.js", "api.js", "style.css", "logo-dl.png"]
+STATIC_FILES = ["app.js", "api.js", "sidebar.js", "style.css", "logo-dl.png"]
 STATIC_DIRS = ["fonts", "vendor"]
 
 # packaged for pyodide.unpackArchive(); paths are relative to the repo root
@@ -46,6 +46,7 @@ ZIP_MEMBERS = [
     "slicer/__init__.py", "slicer/dtm.py", "slicer/params.py", "slicer/contours.py",
     "slicer/nesting.py", "slicer/dxfout.py", "slicer/hatch.py", "slicer/meshload.py",
     "slicer/stroke_font.py", "slicer/hershey_data.py", "slicer/tiffcodecs.py",
+    "slicer/vectors.py",
     # app/ has no __init__.py - it is an implicit namespace package, which
     # works the same once the archive is unpacked next to sys.path
     "app/core.py", "app/demo.py", "app/png.py",

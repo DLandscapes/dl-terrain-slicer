@@ -70,8 +70,8 @@ Everything runs in one tab, so the guards in `api.js` apply:
 | | limit |
 |---|---|
 | file size | warn at 50 MB, refuse at 200 MB |
-| raster size | warn at 20 M cells, refuse at 60 M cells (read from the TIFF header, before decoding) |
-| OBJ meshes | supported since build 22, when the rasteriser was vectorised; a dense mesh takes several seconds |
+| raster size | warn at 20 M cells, refuse at 60 M cells (read from the TIFF or ASCII-grid header, before decoding) |
+| OBJ / STL meshes | OBJ since build 22, when the rasteriser was vectorised; STL since build 32; a dense mesh takes several seconds |
 
 ## Verifying a build
 
@@ -101,6 +101,16 @@ decision, and one number is engraved on the visible ring instead of the glue
 zone. Nothing that is cut moves. Both builds run the identical Python; if
 the desktop venv and Pyodide ever ship the same numpy, this disappears.
 
+### Measured parity (build 32: the new import formats)
+
+Same files, same settings, browser vs desktop (`test outputs\2026-11-14 build
+32 formats and menu\`): DXF, GeoJSON, GML and GeoPackage give the same layers,
+names, kinds and notes; test.tif with all four at 1:500 cuts the same
+shapes - three closed rings start at a different vertex (Hausdorff
+distance 0.000000 mm, same area), and the light-score difference is the
+label flip above, identical without any vector file. A DXF drawn in Rhino 8
+over the OBJ: 21 levels, 1 sheet, 17 engraved strokes in both.
+
 ## Notes for the next person
 
 * `worker.js` is an **ES module** worker (`{type: "module"}`): current
@@ -119,6 +129,8 @@ the desktop venv and Pyodide ever ship the same numpy, this disappears.
   own included) is reported at once instead of leaving Pyodide waiting for
   ever. If a Pyodide upgrade stops calling the global `fetch`, that report
   goes silent and only the watchdog (45 s, then 120 s per step) is left.
+* GeoPackage files are read with `sqlite3.Connection.deserialize`; `sqlite3`
+  is part of Pyodide's standard library, so no extra download (build 32).
 * When deploying an update into the same directory, do not re-upload
   `static/pyodide/` unchanged: a new upload resets its Last-Modified date,
   and the browsers' cache reuse of those files depends on it.

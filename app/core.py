@@ -17,7 +17,7 @@ import io
 import uuid
 from pathlib import Path
 
-from slicer.dtm import load_geotiff, DTM
+from slicer.dtm import load_asc, load_geotiff, DTM
 from slicer.params import SliceParams
 from slicer.contours import slice_dtm
 from slicer.nesting import nest
@@ -28,7 +28,7 @@ from app.png import hillshade_png
 # tags in app/static/index.html. The frontend compares this at startup and
 # tells the user to restart the server if the running process is older than
 # the files on disk.
-APP_BUILD = 31
+APP_BUILD = 32
 
 MAX_UPLOADS = 8
 
@@ -84,10 +84,13 @@ def _terrain_response(store: Store, dtm: DTM, warnings: list[str]) -> dict:
 
 def load_terrain(store: Store, data: bytes, filename: str) -> dict:
     name = filename or "upload"
+    ext = name.lower().rsplit(".", 1)[-1]
     try:
-        if name.lower().endswith(".obj"):
-            from slicer.meshload import load_obj
-            dtm, warnings = load_obj(data, name=name)
+        if ext in ("obj", "stl"):
+            from slicer import meshload
+            dtm, warnings = (meshload.load_obj if ext == "obj" else meshload.load_stl)(data, name=name)
+        elif ext == "asc":
+            dtm, warnings = load_asc(data, name=name)
         else:
             dtm, warnings = load_geotiff(io.BytesIO(data), name=name)
     except Exception as exc:
@@ -101,40 +104,39 @@ def load_demo(store: Store) -> dict:
 
 
 def add_hatch(store: Store, upload_id: str, data: bytes, filename: str) -> dict:
+    """Read a vector file (shapefile, DXF, GeoJSON, GML, GeoPackage) and store
+    one layer per kind and source layer: {"layers": [...], "warnings": [...]}."""
     import shapely
-    from slicer.hatch import read_shp
+    from slicer.vectors import read_vector
     dtm = store.get_dtm(upload_id)
     try:
-        kind, geom = read_shp(data)
+        layers, warnings = read_vector(data, filename or "features.shp")
     except Exception as exc:
-        raise SlicerError(422, f"could not read shapefile: {exc}") from exc
-    # world CRS -> DTM-local frame (x east of west edge, y north of south edge)
-    if kind == "point":
-        local = [(x - dtm.origin_x, y - dtm.origin_y) for x, y in geom]
-        xs = [p[0] for p in local]
-        ys = [p[1] for p in local]
-        minx, miny, maxx, maxy = min(xs), min(ys), max(xs), max(ys)
-        n_features = len(local)
-    else:
-        local = shapely.transform(geom, lambda a: a - [dtm.origin_x, dtm.origin_y])
-        minx, miny, maxx, maxy = local.bounds
-        n_features = len(local.geoms)
-    overlaps = not (maxx < 0 or maxy < 0
-                    or minx > dtm.width_world or miny > dtm.height_world)
-    hid = uuid.uuid4().hex[:8]
-    name = Path(filename or "features.shp").stem
-    store.hatches.setdefault(upload_id, []).append(
-        {"id": hid, "name": name, "kind": kind, "polys": local})
-    return {
-        "hatch_id": hid,
-        "name": name,
-        "kind": kind,
-        "n_features": n_features,
-        "overlaps_terrain": overlaps,
-        "warnings": [] if overlaps else [
-            f"'{name}' lies outside the terrain extent - the shapefile "
-            f"probably uses a different coordinate system than the terrain file"],
-    }
+        raise SlicerError(422, f"could not read vector file: {exc}") from exc
+    out = []
+    for kind, geom, name in layers:
+        # world CRS -> DTM-local frame (the terrain's first cell centre at 0, 0)
+        if kind == "point":
+            xs, ys = [p[0] for p in geom], [p[1] for p in geom]
+            minx, miny, maxx, maxy = min(xs), min(ys), max(xs), max(ys)
+            local = [(x - dtm.origin_x, y - dtm.origin_y) for x, y in geom]
+        else:
+            minx, miny, maxx, maxy = geom.bounds
+            local = shapely.transform(geom, lambda a: a - [dtm.origin_x, dtm.origin_y])
+        overlaps = not (maxx < dtm.origin_x or maxy < dtm.origin_y
+                        or minx > dtm.origin_x + dtm.width_world or miny > dtm.origin_y + dtm.height_world)
+        hid = uuid.uuid4().hex[:8]
+        store.hatches.setdefault(upload_id, []).append(
+            {"id": hid, "name": name, "kind": kind, "polys": local})
+        out.append({"hatch_id": hid, "name": name, "kind": kind})
+        if not overlaps:
+            # only now can lon/lat be told from a local CAD drawing near 0, 0
+            lonlat = -180 <= minx and maxx <= 180 and -90 <= miny and maxy <= 90
+            warnings.append(f"'{name}' lies outside the terrain extent - " + (
+                "its coordinates look like longitude/latitude; export it in the terrain's "
+                "coordinate system (e.g. UTM metres)" if lonlat else
+                "the file probably uses a different coordinate system than the terrain"))
+    return {"layers": out, "warnings": warnings}
 
 
 def remove_hatch(store: Store, upload_id: str, hatch_id: str) -> dict:

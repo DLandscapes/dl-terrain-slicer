@@ -1,4 +1,4 @@
-"""Load a terrain mesh (.obj) and rasterize it to a heightfield DTM.
+"""Load a terrain mesh (.obj or .stl) and rasterize it to a heightfield DTM.
 
 The mesh is treated like the Grasshopper original's input: a single terrain
 surface in real-world units (metres). It is sampled onto a regular grid via
@@ -34,6 +34,26 @@ def parse_obj(data: bytes) -> tuple[np.ndarray, np.ndarray]:
     if not verts or not faces:
         raise ValueError("OBJ contains no usable geometry (v/f records)")
     return np.asarray(verts, dtype=np.float64), np.asarray(faces, dtype=np.int32)
+
+
+def parse_stl(data: bytes) -> tuple[np.ndarray, np.ndarray]:
+    """Return (vertices, faces) from binary or ASCII STL, vertices welded.
+
+    STL stores every triangle's three corners separately; welding them back
+    together matters because the grid density below follows the vertex count."""
+    n = int.from_bytes(data[80:84], "little") if len(data) >= 84 else -1
+    if len(data) == 84 + 50 * n:                    # binary ("solid" can start either kind)
+        rec = np.frombuffer(data, dtype=np.dtype([("n", "<f4", 3), ("v", "<f4", (3, 3)),
+                                                  ("a", "<u2")]), count=n, offset=84)
+        corners = rec["v"].reshape(-1, 3).astype(np.float64)
+    else:
+        nums = [line.split()[1:4] for line in data.decode("utf-8", "replace").splitlines()
+                if line.lstrip().startswith("vertex")]
+        corners = np.asarray(nums, dtype=np.float64).reshape(-1, 3)
+    if len(corners) < 3 or len(corners) % 3:
+        raise ValueError("STL contains no usable triangles")
+    verts, inverse = np.unique(corners, axis=0, return_inverse=True)
+    return verts, inverse.reshape(-1, 3).astype(np.int32)
 
 
 def _plan_coords(verts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
@@ -111,8 +131,18 @@ def rasterize(px: np.ndarray, py: np.ndarray, pz: np.ndarray,
 
 
 def load_obj(data: bytes, name: str = "") -> tuple[DTM, list[str]]:
+    return mesh_to_dtm(*parse_obj(data), name)
+
+
+def load_stl(data: bytes, name: str = "") -> tuple[DTM, list[str]]:
+    dtm, warnings = mesh_to_dtm(*parse_stl(data), name)
+    warnings.append("STL files carry no units and CAD exports are often in millimetres - "
+                    "check the model size before cutting")
+    return dtm, warnings
+
+
+def mesh_to_dtm(verts: np.ndarray, faces: np.ndarray, name: str = "") -> tuple[DTM, list[str]]:
     warnings: list[str] = []
-    verts, faces = parse_obj(data)
     px, py, pz, up = _plan_coords(verts)
     if up == "Y":
         warnings.append("mesh interpreted as Y-up (Blender default); elevation taken from Y")

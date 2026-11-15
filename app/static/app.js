@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 31;
+const EXPECTED_BUILD = 32;
 
 /* Can this browser run the engine at all?
  *
@@ -111,8 +111,8 @@ const dropzone = $("#dropzone");
 const fileInput = $("#file-input");
 if (!api.supportsMesh) {
   // do not invite a file the build is only going to refuse
-  fileInput.accept = ".tif,.tiff";
-  $("#drop-hint strong").textContent = "Drop a GeoTIFF DTM here";
+  fileInput.accept = ".tif,.tiff,.asc";
+  $("#drop-hint strong").textContent = "Drop a GeoTIFF or ASCII grid here";
 }
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
@@ -290,21 +290,33 @@ function defaultLayerSettings(kind, index) {
 
 async function uploadHatch(file, expectedKind) {
   if (!state.uploadId) {
-    alert("Load a terrain file first, then add the shapefile.");
+    alert("Load a terrain file first, then add the vector file.");
     return;
   }
   setBusy(true);
   try {
+    // one file can hold several layers (DXF layers, GeoPackage tables) and kinds
     const data = await api.hatchAdd(state.uploadId, file);
-    const sameKind = state.hatches.filter((h) => h.kind === data.kind).length;
-    state.hatches.push({
-      id: data.hatch_id, kind: data.kind, name: data.name,
-      ...defaultLayerSettings(data.kind, sameKind),
-    });
-    renderHatchList();
     const notes = [...data.warnings];
-    if (expectedKind && data.kind !== expectedKind) {
-      notes.push(`'${data.name}' contains ${data.kind} features - added to the ${data.kind} section`);
+    for (const [i, layer] of data.layers.entries()) {
+      const sameKind = state.hatches.filter((h) => h.kind === layer.kind).length;
+      state.hatches.push({
+        id: layer.hatch_id, kind: layer.kind, name: layer.name,
+        // the file's notes (units, left-out entities) ride on its first layer,
+        // so every slice shows them again until that layer is removed
+        notes: i === 0 ? data.warnings : [],
+        ...defaultLayerSettings(layer.kind, sameKind),
+      });
+    }
+    if (expectedKind && !data.layers.some((l) => l.kind === expectedKind)) {
+      const kinds = [...new Set(data.layers.map((l) => l.kind))].join(" and ");
+      notes.push(`'${file.name}' contains ${kinds} features - added to the ${kinds} section`);
+    }
+    renderHatchList();
+    // open the folds the new cards went into, so they are seen
+    for (const l of data.layers) {
+      const fold = document.getElementById(`sec-eng-${l.kind}`);
+      if (fold) fold.open = true;
     }
     if (notes.length) {
       $("#warnings").hidden = false;
@@ -312,7 +324,7 @@ async function uploadHatch(file, expectedKind) {
     }
     requestSlice(true);
   } catch (err) {
-    alert("Shapefile failed: " + err.message);
+    alert("Vector file failed: " + err.message);
   } finally {
     setBusy(false);
   }
@@ -430,10 +442,13 @@ function readParams() {
     else if (el.tagName === "SELECT") p[el.name] = el.value;
     else p[el.name] = parseFloat(el.value);
   }
-  p.hatch_layers = state.hatches.map(({ name, ...settings }) => settings);
+  p.hatch_layers = state.hatches.map(({ name, notes, ...settings }) => settings);
   return p;
 }
 $("#params").addEventListener("input", () => requestSlice());
+// the menu's buttons live inside this form: Enter in a field must never submit
+// it, which would reload the page and drop the loaded terrain
+$("#params").addEventListener("submit", (e) => e.preventDefault());
 
 /* The 400 ms wait is there for the parameter form, which fires on every
  * keystroke and every slider tick. Discrete actions - a terrain or a
@@ -482,7 +497,7 @@ function renderStats() {
     `<b>${st.n_levels}</b> contours · <b>${st.n_boards}</b> boards · <b>${st.n_sheets}</b> sheets<br>` +
     `model ${fmt(st.model_width)} × ${fmt(st.model_height)} mm` +
     (st.glue_min != null ? `<br>narrowest glue strip <b>${fmt(st.glue_min)} mm</b>` : "");
-  const warn = state.result.warnings;
+  const warn = [...state.result.warnings, ...state.hatches.flatMap((h) => h.notes)];
   $("#warnings").hidden = warn.length === 0;
   $("#warnings").textContent = warn.join("\n");
 }
@@ -590,8 +605,21 @@ function polyPath(pts, sx, sy) {
   });
 }
 
+/* The part of the canvas the floating windows leave free: right of the menu
+ * while it is open on the left, below the tab bar - so the sheets are laid
+ * out where they can be seen, not underneath the menu. */
+function freeArea(w, h) {
+  const m = $("#sidebar");
+  const r = m.classList.contains("min") ? null : m.getBoundingClientRect();
+  // beside a menu on the left - unless it covers half the screen (a phone)
+  const left = r && r.left < w / 3 && r.right < w / 2 ? r.right : 0;
+  return { x: left, y: 40, w: w - left, h: h - 40 };
+}
+document.addEventListener("dl-menu-layout", () => { if (state.tab === "sheets") draw(); });
+
 function drawSheets() {
   const { w, h } = fitCanvas();
+  const area = freeArea(w, h);
   ctx.clearRect(0, 0, w, h);
   ctx.translate(sheetView.x, sheetView.y);
   ctx.scale(sheetView.z, sheetView.z);
@@ -616,28 +644,29 @@ function drawSheets() {
     ctx.textAlign = "center";
     ctx.fillStyle = "#111";
     ctx.font = '600 15px "Source Sans 3", system-ui';
-    ctx.fillText(lines[0], w / 2, h / 2 - 14);
+    const cx = area.x + area.w / 2, cy = area.y + area.h / 2;
+    ctx.fillText(lines[0], cx, cy - 14);
     ctx.fillStyle = "#6d6f72";
     ctx.font = '13px "Quattrocento Sans", system-ui';
-    ctx.fillText(lines[1], w / 2, h / 2 + 8);
-    ctx.fillText(lines[2], w / 2, h / 2 + 28);
+    ctx.fillText(lines[1], cx, cy + 8);
+    ctx.fillText(lines[2], cx, cy + 28);
     ctx.textAlign = "start";
     return;
   }
 
   const n = stats.n_sheets;
   const pad = 20;
-  let cols = Math.ceil(Math.sqrt((n * sheet.h * (w - pad)) / (sheet.w * (h - pad))));
+  let cols = Math.ceil(Math.sqrt((n * sheet.h * (area.w - pad)) / (sheet.w * (area.h - pad))));
   cols = Math.min(n, Math.max(1, cols));
   const rows = Math.ceil(n / cols);
   const scale = Math.min(
-    (w - pad * (cols + 1)) / (cols * sheet.w),
-    (h - pad * (rows + 1)) / (rows * sheet.h));
+    (area.w - pad * (cols + 1)) / (cols * sheet.w),
+    (area.h - pad * (rows + 1)) / (rows * sheet.h));
 
   for (let s = 0; s < n; s++) {
     const gx = s % cols, gy = Math.floor(s / cols);
-    const ox = pad + gx * (sheet.w * scale + pad);
-    const oy = pad + gy * (sheet.h * scale + pad);
+    const ox = area.x + pad + gx * (sheet.w * scale + pad);
+    const oy = area.y + pad + gy * (sheet.h * scale + pad);
     const sx = (x) => ox + x * scale;
     const sy = (y) => oy + (sheet.h - y) * scale; // y up like the DXF
 

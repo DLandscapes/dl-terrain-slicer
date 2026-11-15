@@ -36,7 +36,7 @@ for package in ("tifffile", "ezdxf", "uvicorn"):
 
 # imported inside functions in app/core.py, invisible to the dependency graph
 hiddenimports += ["app.core", "app.demo", "app.png",
-                  "slicer.meshload", "slicer.hatch", "slicer.hershey_data"]
+                  "slicer.meshload", "slicer.hatch", "slicer.hershey_data", "slicer.vectors"]
 
 a = Analysis(
     ["launcher.py"],

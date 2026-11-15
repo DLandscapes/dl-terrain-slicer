@@ -65,6 +65,13 @@ function tiffDimensions(buf) {
   }
 }
 
+/** Width/height from an ESRI ASCII grid's header (ncols, nrows), or null. */
+function ascDimensions(buf) {
+  const head = new TextDecoder("latin1").decode(buf.slice(0, 1024));
+  const w = /^\s*ncols\s+(\d+)/im.exec(head), h = /^\s*nrows\s+(\d+)/im.exec(head);
+  return w && h ? { width: +w[1], height: +h[1] } : null;
+}
+
 /** Throws on a hard limit, returns a warning string (or "") on a soft one. */
 function checkTerrainFile(name, buf) {
   // OBJ was refused here until build 22, when the per-triangle rasterizer in
@@ -78,7 +85,7 @@ function checkTerrainFile(name, buf) {
       `${mb(LIMITS.maxBytes)} because everything runs inside this tab - ` +
       `please use the desktop version, or clip/downsample the raster in GIS.`);
   }
-  const dim = tiffDimensions(buf);
+  const dim = tiffDimensions(buf) || ascDimensions(buf);
   if (dim) {
     const px = dim.width * dim.height;
     if (px >= LIMITS.maxPixels) {

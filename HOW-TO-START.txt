@@ -33,9 +33,13 @@ OPTION 2 - FROM POWERSHELL / A TERMINAL
 
 USING THE APP
 -------------
-- Drop a GeoTIFF DTM (.tif) or an OBJ terrain mesh (.obj) into the
-  upload field - or click "load demo terrain" to try it out.
-- Optionally add shapefiles (.shp): polygons become hatched areas,
+- The menu on the left runs top to bottom: Import, Slice, Nest, Label,
+  Engrave, Export - one section open at a time. Drag it by its header;
+  the button at the top right (or Esc) folds it away and back.
+- Drop a terrain into Import: GeoTIFF (.tif), ASCII grid (.asc), or an
+  OBJ / STL mesh - or click "load demo terrain" to try it out.
+- Optionally add vector files in Engrave - shapefile, DXF (e.g. drawn
+  in Rhino), GeoJSON, GML or GeoPackage: areas become hatched areas,
   lines become scored linework, points become circles.
 - Adjust parameters; the preview updates live.
 - "Export DXF (ZIP)" downloads one DXF per material sheet plus a
