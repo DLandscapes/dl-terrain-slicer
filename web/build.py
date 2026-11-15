@@ -15,10 +15,10 @@ Layout produced:
       static/
         app.js api.js style.css logo-dl.png fonts/ vendor/   (as shipped)
         worker.js           Pyodide host
-        slicer.zip          slicer/ + app/ + bridge.py
-        manifest.json       what worker.js has to load
+        slicer.zip          slicer/ + app/ + bridge.py + the pure-python
+                            wheels (tifffile, ezdxf, ...) already unpacked:
+                            one download instead of six
         pyodide/            pinned runtime + numpy/shapely/contourpy wheels
-        wheels/             pure-python wheels (tifffile, ezdxf, ...)
 
 Run web/fetch_pyodide.py once to populate web/vendor - that step downloads
 from the internet, this one never does.
@@ -26,7 +26,6 @@ from the internet, this one never does.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 import zipfile
@@ -52,9 +51,6 @@ ZIP_MEMBERS = [
     "app/core.py", "app/demo.py", "app/png.py",
     "web/bridge.py",
 ]
-
-# loaded from the pinned pyodide distribution (native code - must match it)
-PYODIDE_PACKAGES = ["numpy", "contourpy", "shapely"]
 
 
 def build_number() -> int:
@@ -112,8 +108,14 @@ def write_index(build: int) -> None:
     (DIST / "index.html").write_text(html.replace(marker, inject), encoding="utf-8")
 
 
-def write_slicer_zip() -> None:
-    out = DIST / "static" / "slicer.zip"
+def write_slicer_zip(out: Path, wheels: list[Path]) -> Path:
+    """The slicer sources plus the pure-python wheels, unpacked, in one archive.
+
+    A wheel without compiled code is a zip that only needs unpacking to be
+    installed - except for anything under <name>.data/: purelib, scripts and
+    headers need a real installer, so those stop the build. data/ is skipped
+    (fonttools only ships a man page there)."""
+    seen: set[str] = set()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         for rel in ZIP_MEMBERS:
             path = ROOT / rel
@@ -122,32 +124,40 @@ def write_slicer_zip() -> None:
             # bridge.py sits next to the packages inside the archive
             arc = "bridge.py" if rel == "web/bridge.py" else rel
             zf.write(path, arc)
+            seen.add(arc)
+        for whl in wheels:
+            with zipfile.ZipFile(whl) as w:
+                for name in w.namelist():
+                    top = name.split("/", 1)[0]
+                    if top.endswith(".data"):
+                        if not name.startswith(top + "/data/"):
+                            raise SystemExit(f"{whl.name}: {name} needs a real installer")
+                        continue
+                    if name in seen:
+                        raise SystemExit(f"{whl.name}: {name} is already in slicer.zip")
+                    zf.writestr(name, w.read(name))
+                    seen.add(name)
     return out
 
 
-def copy_runtime() -> tuple[list[str], list[str]]:
-    """Copy the vendored runtime into dist. Returns (packages, wheel files)."""
+def copy_runtime() -> list[Path]:
+    """Copy the vendored runtime into dist. Returns the pure-python wheels."""
     src = VENDOR / "pyodide"
     if not src.exists():
         print("! web/vendor/pyodide is missing - run web/fetch_pyodide.py first.")
         print("  Building the rest anyway; the page will not start without it.")
-        return PYODIDE_PACKAGES, []
+        return []
     shutil.copytree(src, DIST / "static" / "pyodide")
-    wheels_src = VENDOR / "wheels"
-    wheels: list[str] = []
-    if wheels_src.exists():
-        dst = DIST / "static" / "wheels"
-        dst.mkdir(parents=True, exist_ok=True)
-        for p in sorted(wheels_src.glob("*.whl")):
-            # only universal wheels run in WebAssembly - a compiled wheel for
-            # the build machine (pip picks those by default) would break the
-            # page at load time, so leave it behind and say so
-            if not p.name.endswith("-py3-none-any.whl"):
-                print(f"! skipping platform-specific wheel {p.name}")
-                continue
-            shutil.copy2(p, dst / p.name)
-            wheels.append(p.name)
-    return PYODIDE_PACKAGES, wheels
+    wheels: list[Path] = []
+    for p in sorted((VENDOR / "wheels").glob("*.whl")):
+        # only universal wheels run in WebAssembly - a compiled wheel for the
+        # build machine (pip picks those by default) would break the page at
+        # load time, so leave it behind and say so
+        if not p.name.endswith("-py3-none-any.whl"):
+            print(f"! skipping platform-specific wheel {p.name}")
+            continue
+        wheels.append(p)
+    return wheels
 
 
 def human(n: int) -> str:
@@ -176,15 +186,11 @@ def main() -> None:
 
     copy_static()
     write_index(build)
-    zip_path = write_slicer_zip()
-    packages, wheels = copy_runtime()
-    (DIST / "static" / "manifest.json").write_text(
-        json.dumps({"build": build, "packages": packages, "wheels": wheels},
-                   indent=2), encoding="utf-8")
+    wheels = copy_runtime()
+    zip_path = write_slicer_zip(DIST / "static" / "slicer.zip", wheels)
 
     print(f"built dist for build {build}")
-    print(f"  slicer.zip   {human(zip_path.stat().st_size)}")
-    print(f"  pyodide      {len(packages)} packages, {len(wheels)} extra wheels")
+    print(f"  slicer.zip   {human(zip_path.stat().st_size)}, incl. {len(wheels)} wheels")
     print(f"  total        {human(tree_size(DIST))}")
     print(f"  -> {DIST}")
 

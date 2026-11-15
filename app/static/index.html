@@ -7,7 +7,7 @@
 <!-- asset paths are RELATIVE on purpose: the browser build is hosted in a
      sub-directory (e.g. /terrain-slicer/v1/), the server build at / -->
 <link rel="icon" type="image/png" href="static/logo-dl.png">
-<link rel="stylesheet" href="static/style.css?v=30">
+<link rel="stylesheet" href="static/style.css?v=31">
 </head>
 <body>
 <!-- Shown INSTEAD of the app when the browser cannot run the engine. Filled in
@@ -221,6 +221,9 @@
     <b>Starting the terrain engine</b>
     <p id="boot-step">loading&hellip;</p>
     <div class="boot-bar"><i id="boot-fill"></i></div>
+    <p id="boot-giveup" hidden>If it keeps failing, reload the page in a few
+      minutes, or <a href="https://github.com/DLandscapes/dl-terrain-slicer/releases/latest"
+      target="_blank" rel="noopener">download the desktop version&nbsp;&rarr;</a></p>
     <small><b>The first start takes 20&ndash;60 seconds</b> &mdash; on an older
       computer up to a couple of minutes. That is normal: the whole Python
       engine is being downloaded (about 20&nbsp;MB) and compiled inside your
@@ -234,7 +237,7 @@
 <script src="static/vendor/three.min.js"></script>
 <script src="static/vendor/OrbitControls.js"></script>
 <!-- TS_MODE is injected here by web/build.py for the browser build -->
-<script src="static/api.js?v=30"></script>
-<script src="static/app.js?v=30"></script>
+<script src="static/api.js?v=31"></script>
+<script src="static/app.js?v=31"></script>
 </body>
 </html>

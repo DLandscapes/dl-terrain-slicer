@@ -33,8 +33,11 @@ python web/build.py --serve                       # -> web/dist, http://localhos
 
 Pinned: **Pyodide 314.0.3** (Python 3.14, numpy 2.4.3, shapely 2.1.2,
 contourpy 1.3.3) plus tifffile 2026.7.14 and ezdxf 1.4.4 as pure-python
-wheels. `web/dist` ends up at about 21 MB, of which the visitor's browser
-caches ~13 MB of runtime on first start.
+wheels. Since build 31 those wheels travel unpacked inside `slicer.zip`
+(~3 MB) instead of as five separate downloads, and there is no
+`manifest.json` any more: a start asks the server for fewer files. `web/dist`
+ends up at about 21 MB, of which the visitor's browser caches ~13 MB of
+runtime on first start.
 
 On Windows, stop the `--serve` server before rebuilding: it holds the files
 it is serving and `build.py` cannot replace them (it says so if it happens).
@@ -104,6 +107,18 @@ the desktop venv and Pyodide ever ship the same numpy, this disappears.
   Pyodide throws `Classic web workers are not supported` otherwise.
 * `pyodide.mjs` dynamically imports `pyodide.asm.mjs` — both must be
   vendored, together with `pyodide.asm.wasm` and `python_stdlib.zip`.
-* Only universal (`-py3-none-any`) wheels are copied into the build; `pip`
+* Only universal (`-py3-none-any`) wheels are packed into the build; `pip`
   otherwise hands you a wheel compiled for the build machine, which cannot
-  load in WebAssembly. `build.py` says which wheels it skipped.
+  load in WebAssembly. `build.py` says which wheels it skipped, and stops if a
+  wheel needs a real installer (anything under `<name>.data/` but `data/`).
+* **The host can refuse the engine's files.** digital-landscapes.com limits
+  static downloads per connection and answers HTTP 429 (measured 2026-11-14).
+  Since build 31 `api.js` starts a failed or stalled boot again in a fresh
+  worker - at most 4 attempts, pauses 5 / 15 / 45 s with jitter - and says
+  what went wrong; `worker.js` wraps `fetch`, so a refused download (Pyodide's
+  own included) is reported at once instead of leaving Pyodide waiting for
+  ever. If a Pyodide upgrade stops calling the global `fetch`, that report
+  goes silent and only the watchdog (45 s, then 120 s per step) is left.
+* When deploying an update into the same directory, do not re-upload
+  `static/pyodide/` unchanged: a new upload resets its Last-Modified date,
+  and the browsers' cache reuse of those files depends on it.

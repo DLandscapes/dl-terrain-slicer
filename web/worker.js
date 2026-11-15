@@ -15,6 +15,28 @@
 
 import { loadPyodide } from "./pyodide/pyodide.mjs";
 
+// Every download the engine makes - Pyodide's own included, it calls the global
+// fetch - reports a refusal at once, with file and status: a refused
+// pyodide.asm.wasm would otherwise leave Pyodide waiting for ever, and a refused
+// package would only surface later as "No module named ...". api.js decides
+// what to do about it (start again, or explain).
+const realFetch = self.fetch.bind(self);
+self.fetch = async (input, init) => {
+  const url = String((input && input.url) || input);
+  try {
+    const res = await realFetch(input, init);
+    if (!res.ok) self.postMessage({ type: "fetchfail", url, status: res.status });
+    return res;
+  } catch (err) {
+    self.postMessage({ type: "fetchfail", url, status: 0 });
+    throw err;
+  }
+};
+
+// must equal NEEDED_PACKAGES in web/fetch_pyodide.py (native code, from the
+// pinned Pyodide); the pure-Python wheels travel inside slicer.zip
+const PACKAGES = ["numpy", "contourpy", "shapely"];
+
 const V = new URLSearchParams(self.location.search).get("v") || "";
 const rel = (path) => new URL(path + (V ? (path.includes("?") ? "&" : "?") + "v=" + V : ""),
   self.location).href;
@@ -29,8 +51,6 @@ function progress(step, detail) {
 }
 
 async function boot() {
-  const manifest = await (await fetch(rel("manifest.json"))).json();
-
   progress("runtime", "loading the Python runtime…");
   pyodide = await loadPyodide({
     indexURL: bare("pyodide/"),
@@ -39,14 +59,9 @@ async function boot() {
   });
 
   progress("packages", "loading numpy, shapely, contourpy…");
-  if (manifest.packages.length) await pyodide.loadPackage(manifest.packages);
+  await pyodide.loadPackage(PACKAGES);
 
-  if (manifest.wheels.length) {
-    progress("packages", "loading tifffile, ezdxf…");
-    await pyodide.loadPackage(manifest.wheels.map((w) => bare("wheels/" + w)));
-  }
-
-  progress("slicer", "unpacking the slicer…");
+  progress("slicer", "loading the slicer, tifffile, ezdxf…");
   const zip = await (await fetch(rel("slicer.zip"))).arrayBuffer();
   pyodide.unpackArchive(zip, "zip");
 

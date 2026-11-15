@@ -161,48 +161,71 @@ function serverApi() {
 }
 
 /* ---------- wasm mode ---------- */
+/* The website can refuse the engine's files: the host limits static downloads
+ * per connection and answers HTTP 429 (measured 2026-11-14). A refused
+ * worker.js or pyodide.mjs fires a bare error event, a refused
+ * pyodide.asm.wasm leaves Pyodide waiting for ever. So a boot that fails or
+ * stalls is thrown away and started again in a fresh worker; files that did
+ * arrive come from the browser cache on the next try. */
+const RETRY_S = [5, 15, 45];  // pauses between the 4 attempts, x0.5-1.5 jitter: a
+                              // classroom behind one address must not retry in step
+const FIRST_S = 45;           // until the worker reports its first step
+const STEP_S = 120;           // per step after that, doubled once a boot stalled:
+                              // the 6.3 MB runtime on a slow shared line
+
 function wasmApi() {
-  // the ?v= is passed on to slicer.zip/manifest.json inside the worker, so a
-  // new build never runs against a cached engine
+  // the ?v= is passed on to slicer.zip inside the worker, so a new build never
+  // runs against a cached engine
   const v = window.TS_ASSET_V ? `?v=${window.TS_ASSET_V}` : "";
-  // module worker: Pyodide will not start in a classic one
-  const worker = new Worker(`static/worker.js${v}`, { type: "module" });
   const pending = new Map();
   let nextId = 1;
+  let worker = null;
   let booted = null;
+  let onBoot = null;  // while booting: called with what went wrong, or null on progress
 
   const self_ = {
     mode: "wasm",
     onProgress: null,
     onSliceProgress: null,   // (done, total) while a slice runs; wasm only
   };
+  const progress = (step, detail) => { if (self_.onProgress) self_.onProgress(step, detail); };
 
-  worker.onmessage = (ev) => {
-    const m = ev.data;
-    if (m.type === "progress") {
-      // step "slice" carries done/total from inside the slicing loop; every
-      // other step is boot progress and carries a detail string. Exposed as a
-      // CAPABILITY (onSliceProgress may simply never fire) rather than
-      // something app.js has to ask the transport about - the desktop build
-      // has no channel for mid-call messages and the UI falls back on its own.
-      if (m.step === "slice") {
-        if (self_.onSliceProgress) self_.onSliceProgress(m.done, m.total);
+  function spawn() {
+    // module worker: Pyodide will not start in a classic one
+    worker = new Worker(`static/worker.js${v}`, { type: "module" });
+    worker.onmessage = (ev) => {
+      const m = ev.data;
+      if (m.type === "fetchfail") {
+        if (onBoot) onBoot({ status: m.status, url: m.url });
         return;
       }
-      if (self_.onProgress) self_.onProgress(m.step, m.detail || "");
-      return;
-    }
-    const p = pending.get(m.id);
-    if (!p) return;
-    pending.delete(m.id);
-    if (m.ok) p.resolve(m.result);
-    else p.reject(new Error(m.error || "the browser engine failed"));
-  };
-  worker.onerror = (ev) => {
-    const err = new Error("engine failed to start: " + (ev.message || "unknown error"));
-    for (const p of pending.values()) p.reject(err);
-    pending.clear();
-  };
+      if (m.type === "progress") {
+        // step "slice" carries done/total from inside the slicing loop; every
+        // other step is boot progress and carries a detail string. Exposed as a
+        // CAPABILITY (onSliceProgress may simply never fire) rather than
+        // something app.js has to ask the transport about - the desktop build
+        // has no channel for mid-call messages and the UI falls back on its own.
+        if (m.step === "slice") {
+          if (self_.onSliceProgress) self_.onSliceProgress(m.done, m.total);
+          return;
+        }
+        if (onBoot) onBoot(null);
+        progress(m.step, m.detail || "");
+        return;
+      }
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      if (m.ok) p.resolve(m.result);
+      else p.reject(new Error(m.error || "the browser engine failed"));
+    };
+    worker.onerror = (ev) => {
+      if (onBoot) onBoot({ message: ev.message });
+      const err = new Error(ev.message || "the browser engine stopped");
+      for (const p of pending.values()) p.reject(err);
+      pending.clear();
+    };
+  }
 
   function call(op, payload, transfer) {
     return new Promise((resolve, reject) => {
@@ -212,8 +235,76 @@ function wasmApi() {
     });
   }
 
+  // One attempt: resolves to null once the engine is up, else to what went wrong.
+  function bootOnce(patience) {
+    return new Promise((resolve) => {
+      let timer = null;
+      const arm = (s) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => done({ stall: s }), s * 1000);
+      };
+      const done = (failure) => {
+        if (!onBoot) return;  // settled already
+        onBoot = null;
+        clearTimeout(timer);
+        resolve(failure);
+      };
+      onBoot = (failure) => (failure ? done(failure) : arm(patience));
+      spawn();
+      arm(FIRST_S);
+      call("init", {}).then(() => done(null), (err) => done({ message: err.message }));
+    });
+  }
+
+  // The HTTP status of the two files every boot needs first, when the failure
+  // itself did not say: {status, url}, status -1 = unreachable, null = both fine.
+  async function probe() {
+    for (const url of [`static/worker.js${v}`, "static/pyodide/pyodide.mjs"]) {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 10000);
+      try {
+        const r = await fetch(url, { cache: "no-store", signal: ctl.signal });
+        if (!r.ok) return { status: r.status, url };
+      } catch {
+        return { status: -1, url };
+      } finally {
+        clearTimeout(t);
+      }
+    }
+    return null;
+  }
+
+  async function explain(f) {
+    const p = f.status > 0 ? f : (await probe()) || f;
+    const file = (p.url || "").split("?")[0].split("/").pop();
+    if (p.status === 429) return "The website is limiting downloads from your connection right now (HTTP 429).";
+    if (p.status > 0) return `Could not load ${file} (HTTP ${p.status}).`;
+    if (p.status < 0) return `Could not reach ${location.hostname} - check your internet connection.`;
+    if (p.url) return `Could not load ${file} (the download broke off).`;
+    if (p.stall) return `The download stopped (nothing arrived for ${p.stall} s).`;
+    return `The engine failed to start (${p.message || "unknown error"}).`;
+  }
+
+  async function bootWithRetry() {
+    let patience = STEP_S;
+    for (let attempt = 0; ; attempt++) {
+      const failure = await bootOnce(patience);
+      if (!failure) return;
+      worker.onmessage = worker.onerror = null;
+      worker.terminate();
+      pending.clear();
+      if (failure.stall) patience = 2 * STEP_S;
+      const why = await explain(failure);
+      if (attempt >= RETRY_S.length) throw new Error(why);
+      const wait = Math.round(RETRY_S[attempt] * (0.5 + Math.random()));
+      progress("retry", `${why} Retrying in ${wait} s…`);
+      await new Promise((r) => setTimeout(r, wait * 1000));
+      progress("start", `trying again (attempt ${attempt + 2} of ${RETRY_S.length + 1})…`);
+    }
+  }
+
   self_.ready = () => {
-    if (!booted) booted = call("init", {});
+    if (!booted) booted = bootWithRetry();
     return booted;
   };
 

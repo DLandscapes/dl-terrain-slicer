@@ -1,7 +1,7 @@
 "use strict";
 
 // must match APP_BUILD in app/core.py and the ?v= tags in index.html
-const EXPECTED_BUILD = 30;
+const EXPECTED_BUILD = 31;
 
 /* Can this browser run the engine at all?
  *
@@ -47,13 +47,16 @@ if (api.mode === "wasm") {
   const boot = document.querySelector("#boot");
   const fill = document.querySelector("#boot-fill");
   const stepEl = document.querySelector("#boot-step");
+  const giveup = document.querySelector("#boot-giveup");
   const STEPS = ["runtime", "packages", "slicer", "ready"];
   if (api.mode === "wasm") {
     boot.hidden = false;
     api.onProgress = (step, detail) => {
-      const i = Math.max(0, STEPS.indexOf(step));
-      fill.style.width = `${((i + 1) / STEPS.length) * 100}%`;
+      // "retry" and "start" are not in STEPS: the bar empties while it starts again
+      fill.style.width = `${((STEPS.indexOf(step) + 1) / STEPS.length) * 100}%`;
       stepEl.textContent = detail || step;
+      boot.classList.toggle("failed", step === "retry");
+      if (step === "retry") giveup.hidden = false;
     };
   }
   let stale = false;
@@ -62,8 +65,9 @@ if (api.mode === "wasm") {
     stale = (await api.version()).build !== EXPECTED_BUILD;
   } catch (err) {
     if (api.mode === "wasm") {
-      stepEl.textContent = "failed: " + err.message;
+      stepEl.textContent = err.message;
       boot.classList.add("failed");
+      giveup.hidden = false;
       return;
     }
     stale = true;
