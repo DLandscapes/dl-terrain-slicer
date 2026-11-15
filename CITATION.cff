@@ -27,9 +27,11 @@ abstract: >-
   distributed onto N boards, board k carrying contours k, k+N, k+2N, ... as
   in-place cutlines, so every contour is cut exactly once and the pieces are
   rings rather than solid slabs. Output is one DXF per material sheet with
-  one layer per laser pass, plus a cutting report. Reads GeoTIFF terrain
-  models and OBJ terrain meshes; polygon, line and point shapefiles become
-  hatching, scored linework and circles. Contour numbers are engraved in
+  one layer per laser pass, plus a cutting report. Reads GeoTIFF and
+  ASCII-grid terrain models and OBJ or STL terrain meshes; areas, lines and
+  points from shapefiles, DXF (for example drawn in Rhino over the terrain
+  mesh), GeoJSON, GML or GeoPackage become hatching, scored linework and
+  circles. Contour numbers are engraved in
   single-stroke Hershey fonts, hidden in the glue zone by default. Runs as a
   desktop application (Windows, macOS) or entirely in the browser
   (Pyodide/WebAssembly); terrain data is processed locally and never
@@ -45,10 +47,15 @@ keywords:
   - physical model
   - DXF
   - GeoTIFF
+  - ASCII grid
+  - STL
+  - GeoJSON
+  - GeoPackage
+  - GML
   - landscape architecture
 license: GPL-3.0-only
 repository-code: "https://github.com/DLandscapes/dl-terrain-slicer"
 url: "https://digital-landscapes.com/terrain-slicer/"
-version: "1.0.7"
-date-released: "2026-10-20"
-doi: "10.5281/zenodo.23510543"
+version: "1.0.8"
+date-released: "2026-11-15"
+doi: "10.5281/zenodo.24251200"
